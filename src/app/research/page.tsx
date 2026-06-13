@@ -2,13 +2,39 @@
 
 import { useState } from "react";
 import { Footer, PageHeader, SiteNav } from "@/components/Brand";
+import type { EvidenceCard } from "@/lib/llm";
 import { buildResearchAnswer } from "@/lib/memorybridge";
 
 export default function ResearchPage() {
   const [query, setQuery] = useState(
     "What helps with evening agitation in mid-stage support?",
   );
-  const answer = buildResearchAnswer(query);
+  const [answer, setAnswer] = useState<EvidenceCard>(() =>
+    buildResearchAnswer(query),
+  );
+  const [loading, setLoading] = useState(false);
+
+  async function search() {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      if (!response.ok) throw new Error("request failed");
+      const data = (await response.json()) as { evidence?: EvidenceCard };
+      if (data.evidence) {
+        setAnswer(data.evidence);
+        return;
+      }
+      setAnswer(buildResearchAnswer(query));
+    } catch {
+      setAnswer(buildResearchAnswer(query));
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <main>
@@ -27,8 +53,8 @@ export default function ResearchPage() {
             onChange={(event) => setQuery(event.target.value)}
             className="textarea"
           />
-          <button className="primary-button" onClick={() => setQuery(query.trim())}>
-            Search
+          <button className="primary-button" onClick={() => void search()}>
+            {loading ? "Searching..." : "Search"}
           </button>
         </section>
 
@@ -52,4 +78,3 @@ export default function ResearchPage() {
     </main>
   );
 }
-
