@@ -31,7 +31,12 @@ export default function ResearchPage() {
   }, []);
 
   return (
-    <CopilotKit runtimeUrl="/api/copilotkit-research" agent="research_agent">
+    <CopilotKit
+      runtimeUrl="/api/copilotkit-research"
+      agent="research_agent"
+      useSingleEndpoint
+      showDevConsole={false}
+    >
       <main className="research-shell">
         <div className="caretaker-bg" aria-hidden="true" />
         <div className="research-inner">

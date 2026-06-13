@@ -64,6 +64,7 @@ export const MusicCardSchema = z.object({
   description: z.string(),
   youtubeSearchQuery: z.string().optional(),
   coverEmoji: z.string(),
+  audioUrl: z.string().optional(),
 });
 
 export const EvidenceCardSchema = z.object({

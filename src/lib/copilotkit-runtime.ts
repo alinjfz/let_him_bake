@@ -9,23 +9,46 @@ function agentUrl(path: string) {
   return `${base.replace(/\/$/, "")}${path}`;
 }
 
+export function buildCopilotRuntimeConfig(
+  basePath: string,
+  agentPath: string,
+  agentKey: string,
+) {
+  const url = agentUrl(agentPath);
+  return {
+    basePath,
+    agentPath,
+    agentKey,
+    url,
+    runtime: {
+      agents: {
+        default: url,
+        [agentKey]: url,
+      },
+      a2ui: { injectA2UITool: false },
+    },
+    mode: "single-route" as const,
+  };
+}
+
 export function createCopilotV2Handler(
   basePath: string,
   agentPath: string,
   agentKey: string,
 ) {
-  const httpAgent = new HttpAgent({ url: agentUrl(agentPath) });
+  const config = buildCopilotRuntimeConfig(basePath, agentPath, agentKey);
+  const httpAgent = new HttpAgent({ url: config.url });
   const runtime = new CopilotRuntime({
     agents: {
       default: httpAgent,
       [agentKey]: httpAgent,
     },
-    a2ui: { injectA2UITool: false },
+    a2ui: config.runtime.a2ui,
   });
 
   return createCopilotRuntimeHandler({
     runtime,
-    basePath,
-    mode: "multi-route",
+    basePath: config.basePath,
+    mode: config.mode,
   });
 }

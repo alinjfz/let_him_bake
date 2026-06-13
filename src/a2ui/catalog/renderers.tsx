@@ -129,6 +129,7 @@ export function MusicCardRenderer({ props }: { props: MusicCardProps }) {
       <h2>{props.songTitle}</h2>
       <p>{props.artist}</p>
       <p className="a2ui-meta">{props.description}</p>
+      {props.audioUrl ? <audio autoPlay controls={false} src={props.audioUrl} /> : null}
       {href ? (
         <a className="a2ui-link" href={href} target="_blank" rel="noreferrer">
           Listen now

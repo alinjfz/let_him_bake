@@ -240,7 +240,7 @@ export async function resolvePatientStep(
       step: 0,
       total: 1,
       showOkay: true,
-      okayLabel: "Okay",
+      okayLabel: "I feel better now",
       speakText: `Here is ${song.artist}.`,
       mode: "panic",
       theme: {

@@ -3,7 +3,6 @@ import type { AppState } from "@/lib/app-state";
 import type { MemoryPolicy, MusicTrack, PatientMode } from "@/lib/app-state-helpers";
 import { buildMemoryPoliciesFromProfile } from "@/lib/app-state-helpers";
 import { hashPassword, normalizeEmail, verifyPassword } from "@/lib/auth-crypto";
-import { loadPatientStore, savePatientStore, type PersistedPatientStore } from "@/lib/patient-persistence";
 
 export interface PatientRecord {
   accessCode: string;
@@ -29,6 +28,52 @@ type RootStore = {
 type Holder = typeof globalThis & {
   __echoesPatients?: RootStore;
 };
+
+type PersistedPatientStore = {
+  patients: Record<string, unknown>;
+  activeCode: string | null;
+};
+
+function getNodeFs() {
+  if (typeof window !== "undefined") return null;
+  try {
+    const requireFn = Function("return require")() as (id: string) => unknown;
+    return requireFn("node:fs") as {
+      mkdirSync: (path: string, options?: { recursive?: boolean }) => void;
+      readFileSync: (path: string, options: "utf8") => string;
+      writeFileSync: (path: string, data: string, options: "utf8") => void;
+    };
+  } catch {
+    return null;
+  }
+}
+
+function loadPatientStore(): PersistedPatientStore | null {
+  const fs = getNodeFs();
+  if (!fs) return null;
+  try {
+    const raw = fs.readFileSync(".echoes/patients.json", "utf8");
+    const parsed = JSON.parse(raw) as PersistedPatientStore;
+    if (!parsed || typeof parsed !== "object" || !parsed.patients) return null;
+    return {
+      patients: parsed.patients,
+      activeCode: parsed.activeCode ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function savePatientStore(store: PersistedPatientStore) {
+  const fs = getNodeFs();
+  if (!fs) return;
+  try {
+    fs.mkdirSync(".echoes", { recursive: true });
+    fs.writeFileSync(".echoes/patients.json", JSON.stringify(store, null, 2), "utf8");
+  } catch (error) {
+    console.error("[echoes] Failed to save patient store:", error);
+  }
+}
 
 function migrateRecord(record: PatientRecord): PatientRecord {
   return {

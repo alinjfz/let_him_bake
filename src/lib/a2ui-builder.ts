@@ -9,6 +9,8 @@ import {
   type A2UISurface,
 } from "@/a2ui/catalog/definitions";
 
+const MUSIC_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
+
 export type PatientFlowMode = "morning" | "panic" | "ask";
 
 export type PatientStep = {
@@ -263,8 +265,8 @@ export function buildPanicStepPlan(
           backgroundEmoji: "🌿",
         },
       },
-      showOkay: true,
-      okayLabel: "I feel better",
+      showOkay: false,
+      okayLabel: "I feel better now",
       speakText: `You are safe at home, ${firstName}.`,
       theme: {
         accent: "#5b9fd4",
@@ -415,6 +417,7 @@ export function buildMusicCardSurface(
       description: song.description,
       youtubeSearchQuery: `${song.artist} ${song.songTitle}`,
       coverEmoji: "🎵",
+      audioUrl: MUSIC_URL,
     },
   });
 }

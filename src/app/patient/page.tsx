@@ -1,7 +1,7 @@
 "use client";
 
-import { PatientShell } from "@/components/patient/PatientShell";
+import { TodayPatientShell } from "@/components/patient/TodayPatientShell";
 
 export default function PatientPage() {
-  return <PatientShell />;
+  return <TodayPatientShell />;
 }
