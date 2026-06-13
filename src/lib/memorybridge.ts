@@ -14,6 +14,7 @@ export interface Medication {
 }
 
 export interface Memory {
+  id: string;
   title: string;
   story: string;
   photoHint: string;
@@ -42,6 +43,7 @@ export interface PatientProfile {
 }
 
 export interface ActivityEvent {
+  id: string;
   timestamp: string;
   type:
     | "task_completed"
@@ -71,18 +73,21 @@ export const DEMO_PROFILE: PatientProfile = {
   ],
   key_memories: [
     {
+      id: "blackpool-ballroom",
       title: "Blackpool Ballroom, 1972",
       story: "You danced with Robert under bright lights. Frank Sinatra played.",
       photoHint: "💃",
       relationship: "husband",
     },
     {
+      id: "sarah-wedding",
       title: "Sarah's wedding at York Minster",
       story: "Sarah looked radiant. You held her hand before the vows.",
       photoHint: "👰",
       relationship: "daughter",
     },
     {
+      id: "leeds-infirmary",
       title: "Leeds General Infirmary",
       story: "You cared for people there for 25 proud years.",
       photoHint: "🏥",
@@ -101,24 +106,28 @@ export const DEMO_PROFILE: PatientProfile = {
 
 export const DEMO_ACTIVITY: ActivityEvent[] = [
   {
+    id: "panic-1",
     timestamp: "2:14 PM",
     type: "panic",
     description: "Panic button pressed",
     severity: "alert",
   },
   {
+    id: "panic-resolved-1",
     timestamp: "2:15 PM",
     type: "panic_resolved",
     description: "Calming voice played and music started",
     severity: "normal",
   },
   {
+    id: "memory-1",
     timestamp: "11:02 AM",
     type: "memory_viewed",
     description: "Sarah memory opened",
     severity: "normal",
   },
   {
+    id: "med-1",
     timestamp: "8:03 AM",
     type: "medication_taken",
     description: "Morning medication confirmed",
@@ -228,4 +237,3 @@ export function buildResearchAnswer(query: string) {
 export function initialActivityLog(): ActivityEvent[] {
   return DEMO_ACTIVITY.map((event) => ({ ...event }));
 }
-

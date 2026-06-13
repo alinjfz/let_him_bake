@@ -4,6 +4,10 @@ import { initialActivityLog } from "@/lib/memorybridge";
 
 const store: ActivityEvent[] = initialActivityLog();
 
+function makeId() {
+  return `activity-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 export async function GET() {
   return NextResponse.json({ events: store });
 }
@@ -15,6 +19,7 @@ export async function POST(request: Request) {
 
   if (body?.description && body?.timestamp && body?.type) {
     store.unshift({
+      id: body.id ?? makeId(),
       timestamp: body.timestamp,
       type: body.type,
       description: body.description,
@@ -24,4 +29,3 @@ export async function POST(request: Request) {
 
   return NextResponse.json({ events: store });
 }
-

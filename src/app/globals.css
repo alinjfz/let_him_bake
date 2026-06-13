@@ -517,3 +517,327 @@ textarea {
   padding: 1.25rem 0 1.5rem;
   color: var(--muted);
 }
+
+.home-shell {
+  min-height: 100vh;
+}
+
+.home-hero {
+  padding-bottom: 3rem;
+}
+
+.home-copy {
+  max-width: 44rem;
+}
+
+.role-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.role-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  background: white;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: 0 18px 40px rgba(37, 40, 48, 0.05);
+}
+
+.role-card strong {
+  font-size: 1.2rem;
+}
+
+.role-pill {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(45, 106, 159, 0.12);
+  color: var(--primary);
+  font-weight: 800;
+}
+
+.role-pill.family {
+  background: rgba(126, 200, 164, 0.2);
+  color: #276a53;
+}
+
+.home-actions {
+  margin-top: 1.5rem;
+}
+
+.patient-shell {
+  min-height: 100vh;
+  padding: 1rem 0 2rem;
+  background:
+    radial-gradient(circle at top right, rgba(126, 200, 164, 0.12), transparent 24%),
+    radial-gradient(circle at bottom left, rgba(45, 106, 159, 0.08), transparent 26%),
+    var(--background);
+}
+
+.patient-topbar,
+.family-header {
+  width: min(1120px, calc(100vw - 2rem));
+  margin: 0 auto 1rem;
+}
+
+.patient-topbar {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.patient-topbar h1,
+.family-header h1 {
+  margin: 0.1rem 0 0;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.05;
+}
+
+.patient-grid,
+.family-grid {
+  width: min(1120px, calc(100vw - 2rem));
+  margin: 0 auto;
+  display: grid;
+  gap: 1rem;
+}
+
+.patient-grid {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+}
+
+.patient-main,
+.patient-side,
+.family-column {
+  display: grid;
+  gap: 1rem;
+}
+
+.patient-intro h2 {
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  margin-top: 0.25rem;
+}
+
+.patient-card {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.patient-lines {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.patient-line {
+  display: flex;
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem;
+  border-radius: 18px;
+  background: var(--surface-soft);
+}
+
+.patient-line strong,
+.patient-line p {
+  margin: 0;
+}
+
+.memory-hero {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.memory-photo {
+  display: grid;
+  place-items: center;
+  width: 4rem;
+  height: 4rem;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(126, 200, 164, 0.22), rgba(45, 106, 159, 0.08));
+  font-size: 1.9rem;
+}
+
+.patient-input {
+  width: 100%;
+  min-height: 2.8rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: white;
+}
+
+.patient-talk-form {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.panic-shell {
+  background: var(--panic-bg);
+}
+
+.panic-main {
+  min-height: 4.4rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--destructive);
+  color: white;
+  font-size: 1.1rem;
+  font-weight: 800;
+  box-shadow: 0 16px 28px rgba(229, 124, 85, 0.22);
+}
+
+.panic-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.voice-card-shell,
+.music-shell {
+  gap: 0.75rem;
+}
+
+.voice-bars {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 2.25rem;
+}
+
+.voice-bars span {
+  width: 0.6rem;
+  height: 1rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--primary), var(--accent));
+  animation: voicePulse 1.15s ease-in-out infinite;
+}
+
+.voice-bars span:nth-child(2) { animation-delay: 0.08s; }
+.voice-bars span:nth-child(3) { animation-delay: 0.16s; }
+.voice-bars span:nth-child(4) { animation-delay: 0.24s; }
+.voice-bars span:nth-child(5) { animation-delay: 0.32s; }
+
+.track-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 20, 32, 0.4);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 40;
+}
+
+.logout-modal {
+  width: min(480px, 100%);
+  display: grid;
+  gap: 0.9rem;
+}
+
+.error-text {
+  color: var(--destructive);
+  margin: 0;
+}
+
+.patient-footer {
+  width: min(1120px, calc(100vw - 2rem));
+  margin: 1rem auto 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.family-grid {
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 0.95fr) minmax(0, 1.1fr);
+  align-items: start;
+  padding-bottom: 2rem;
+}
+
+.family-card {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.family-wide {
+  grid-column: 3 / 4;
+}
+
+.activity-list {
+  display: grid;
+  gap: 0.6rem;
+  max-height: 32rem;
+  overflow: auto;
+  padding-right: 0.1rem;
+}
+
+.activity-list.collapsed {
+  max-height: 11rem;
+}
+
+.event-card.compact {
+  padding: 0.8rem 0.9rem;
+}
+
+.memory-editor {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface-soft);
+}
+
+.memory-editor label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 700;
+}
+
+.memory-editor .textarea {
+  min-height: 7rem;
+}
+
+.evidence-card {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: var(--surface-soft);
+}
+
+@keyframes voicePulse {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleY(1.35);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 920px) {
+  .patient-grid,
+  .family-grid,
+  .role-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .family-wide {
+    grid-column: auto;
+  }
+}

@@ -3,11 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Footer, PageHeader, SiteNav } from "@/components/Brand";
 import { extractPdfText } from "@/lib/pdf";
-import {
-  DEMO_PROFILE,
-  parseCarePlanText,
-  type PatientProfile,
-} from "@/lib/memorybridge";
+import { DEMO_PROFILE, parseCarePlanText, type PatientProfile } from "@/lib/memorybridge";
 
 const STORAGE_KEY = "memorybridge.profile";
 
@@ -17,14 +13,25 @@ export default function SetupPage() {
 
   useEffect(() => {
     const cached = window.sessionStorage.getItem(STORAGE_KEY);
-    if (!cached) return;
-
-    try {
-      setProfile(JSON.parse(cached) as PatientProfile);
-      setStatus("Loaded saved profile.");
-    } catch {
-      window.sessionStorage.removeItem(STORAGE_KEY);
+    if (cached) {
+      try {
+        setProfile(JSON.parse(cached) as PatientProfile);
+        setStatus("Loaded saved profile.");
+        return;
+      } catch {
+        window.sessionStorage.removeItem(STORAGE_KEY);
+      }
     }
+
+    void fetch("/api/state")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { profile?: PatientProfile } | null) => {
+        if (data?.profile) {
+          setProfile(data.profile);
+          setStatus("Loaded shared profile.");
+        }
+      })
+      .catch(() => {});
   }, []);
 
   const summary = useMemo(
@@ -37,14 +44,23 @@ export default function SetupPage() {
     [profile],
   );
 
+  async function persistProfile(nextProfile: PatientProfile, message: string) {
+    setStatus(message);
+    window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(nextProfile));
+    await fetch("/api/state", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ profile: nextProfile }),
+    }).catch(() => {});
+  }
+
   async function handleFile(file: File) {
     setStatus(`Reading ${file.name}...`);
     try {
       const { text } = await extractPdfText(file);
       const parsed = parseCarePlanText(text);
       setProfile(parsed);
-      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
-      setStatus("Profile extracted and saved.");
+      await persistProfile(parsed, "Profile extracted and saved.");
     } catch {
       setStatus("Could not read that file.");
     }
@@ -90,11 +106,7 @@ export default function SetupPage() {
               type="button"
               onClick={() => {
                 setProfile(DEMO_PROFILE);
-                window.sessionStorage.setItem(
-                  STORAGE_KEY,
-                  JSON.stringify(DEMO_PROFILE),
-                );
-                setStatus("Loaded the demo profile.");
+                void persistProfile(DEMO_PROFILE, "Loaded the demo profile.");
               }}
             >
               Use demo profile
@@ -153,8 +165,7 @@ export default function SetupPage() {
             className="primary-button block"
             type="button"
             onClick={() => {
-              setStatus("Profile approved and ready.");
-              window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(profile));
+              void persistProfile(profile, "Profile approved and ready.");
             }}
           >
             Approve profile

@@ -1,240 +1,426 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Footer, PageHeader, SiteNav } from "@/components/Brand";
-import {
-  DEMO_PROFILE,
-  buildMemoryHighlight,
-  buildMedicationSummary,
-  buildMorningGreeting,
-  buildMorningTasks,
-} from "@/lib/memorybridge";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import type {
+  AppState,
+  MemoryCard as MemoryCardType,
+  PatientViewModel,
+  PlaybackStatus,
+  MusicCard as MusicCardType,
+} from "@/lib/app-state";
+import { createMusicTrack } from "@/lib/app-state";
 
-type Mode = "morning" | "memory" | "panic";
+const ROLE_KEY = "memorybridge.role";
+
+type PatientResponse = {
+  reply?: string;
+  track?: ReturnType<typeof createMusicTrack>;
+  view?: PatientViewModel;
+};
 
 export default function PatientPage() {
-  const [mode, setMode] = useState<Mode>("morning");
-  const [musicMode, setMusicMode] = useState(false);
-  const greeting = useMemo(() => buildMorningGreeting(DEMO_PROFILE), []);
-  const tasks = useMemo(() => buildMorningTasks(DEMO_PROFILE), []);
-  const meds = useMemo(() => buildMedicationSummary(DEMO_PROFILE), []);
-  const memory = useMemo(() => buildMemoryHighlight(DEMO_PROFILE), []);
+  const router = useRouter();
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [state, setState] = useState<AppState | null>(null);
+  const [view, setView] = useState<PatientViewModel | null>(null);
+  const [prompt, setPrompt] = useState("");
+  const [reply, setReply] = useState("Hello, Margaret.");
+  const [busy, setBusy] = useState(false);
+  const [voiceState, setVoiceState] = useState<"idle" | "speaking" | "done">("idle");
+  const [voiceText, setVoiceText] = useState("");
+  const [track, setTrack] = useState<ReturnType<typeof createMusicTrack> | null>(
+    null,
+  );
+  const [logoutOpen, setLogoutOpen] = useState(false);
+  const [logoutPin, setLogoutPin] = useState("");
+  const [logoutError, setLogoutError] = useState("");
+  const [speechSupported, setSpeechSupported] = useState(false);
 
-  async function logEvent(
-    type:
-      | "task_completed"
-      | "memory_viewed"
-      | "panic"
-      | "panic_resolved"
-      | "medication_taken",
-    description: string,
-    severity: "normal" | "alert" = "normal",
-  ) {
-    await fetch("/api/activity-log", {
+  async function refreshState() {
+    const response = await fetch("/api/state").catch(() => null);
+    if (!response?.ok) return;
+    const data = (await response.json().catch(() => null)) as AppState | null;
+    if (data) {
+      setState(data);
+      if (data.currentTrack) {
+        setTrack(data.currentTrack);
+      }
+    }
+  }
+
+  async function sendMessage(message: string) {
+    setBusy(true);
+    try {
+      const response = await fetch("/api/patient-agent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      if (!response.ok) throw new Error("request failed");
+      const data = (await response.json()) as PatientResponse;
+      if (data.view) setView(data.view);
+      if (typeof data.reply === "string") setReply(data.reply);
+      if (data.track) {
+        setTrack(data.track);
+        await fetch("/api/state", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            state: {
+              currentTrack: data.track,
+            },
+          }),
+        }).catch(() => {});
+      }
+      if (data.reply) speak(data.reply);
+    } catch {
+      setReply("I am here, Margaret.");
+    } finally {
+      setBusy(false);
+      setPrompt("");
+    }
+  }
+
+  function speak(text: string) {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    setVoiceText(text);
+    setVoiceState("speaking");
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.88;
+    utterance.pitch = 0.95;
+    utterance.onend = () => setVoiceState("done");
+    utterance.onerror = () => setVoiceState("idle");
+    window.speechSynthesis.speak(utterance);
+  }
+
+  useEffect(() => {
+    setSpeechSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+    void refreshState();
+    void sendMessage("");
+  }, []);
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(ROLE_KEY);
+    if (stored && stored !== "patient") {
+      router.push(stored === "family" ? "/family" : "/");
+    }
+  }, [router]);
+
+  useEffect(() => {
+    if (!track || !audioRef.current) return;
+    const audio = audioRef.current;
+    audio.src = track.streamUrl;
+    void audio.play().catch(() => {});
+  }, [track]);
+
+  function updateTrackStatus(status: PlaybackStatus) {
+    if (!track) return;
+    const nextTrack = { ...track, status };
+    setTrack(nextTrack);
+    void fetch("/api/state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        timestamp: new Intl.DateTimeFormat("en-GB", {
-          hour: "numeric",
-          minute: "2-digit",
-          timeZone: "Europe/London",
-        }).format(new Date()),
-        type,
-        description,
-        severity,
-      }),
+      body: JSON.stringify({ state: { currentTrack: nextTrack } }),
     }).catch(() => {});
   }
 
+  const cards = view?.cards ?? [];
+  const profile = state?.profile;
+  const greeting = view?.heading ?? `Hello, ${profile?.first_name ?? "Margaret"}`;
+
+  const panicCard = cards.find((card) => card.kind === "panic");
+  const musicCard = cards.find((card) => card.kind === "music") as
+    | MusicCardType
+    | undefined;
+
+  async function confirmLogout() {
+    const pin = state?.caregiverPin ?? "2468";
+    if (logoutPin.trim() !== pin) {
+      setLogoutError("That passcode did not work.");
+      return;
+    }
+
+    window.localStorage.removeItem(ROLE_KEY);
+    router.push("/");
+  }
+
   return (
-    <main>
-      <SiteNav active="/patient" />
-      <PageHeader
-        eyebrow="Patient"
-        title={`${greeting.name}, ${greeting.dayOfWeek}`}
-        subtitle="The surface stays warm, simple, and reassuring."
-        action={
-          <div className="button-row">
-            <button className="secondary-button" onClick={() => setMode("morning")}>
-              Morning
-            </button>
-            <button
-              className="secondary-button"
-              onClick={() => {
-                setMode("memory");
-                void logEvent("memory_viewed", "Memory opened");
+    <main className="patient-shell">
+      <section className="patient-topbar">
+        <div>
+          <p className="eyebrow">Patient</p>
+          <h1>{greeting}</h1>
+        </div>
+        <div className="button-row">
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => setLogoutOpen(true)}
+          >
+            Logout
+          </button>
+        </div>
+      </section>
+
+      <section className="patient-grid">
+        <section className="patient-main">
+          <div className="patient-intro surface-card">
+            <p className="card-kicker">Reassurance</p>
+            <h2>You are safe. Take one small step.</h2>
+            <p>{reply}</p>
+          </div>
+
+          {cards
+            .filter((card) => card.kind !== "panic" && card.kind !== "music")
+            .map((card) => {
+              if (card.kind === "greeting") {
+                return null;
+              }
+              if (card.kind === "reassurance") {
+                return null;
+              }
+              if (card.kind === "tasks") {
+                return (
+                  <div key={card.id} className="surface-card patient-card">
+                    <p className="card-kicker">Today</p>
+                    <h3>{card.title}</h3>
+                    <div className="patient-lines">
+                      {card.items.map((item) => (
+                        <div key={`${item.time}-${item.description}`} className="patient-line">
+                          <span>{item.icon}</span>
+                          <div>
+                            <strong>{item.time}</strong>
+                            <p>{item.description}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              if (card.kind === "medication") {
+                return (
+                  <div key={card.id} className="surface-card patient-card">
+                    <p className="card-kicker">Medication</p>
+                    <h3>{card.title}</h3>
+                    <div className="patient-lines">
+                      {card.items.map((item) => (
+                        <div key={`${item.name}-${item.time}`} className="patient-line">
+                          <span>💊</span>
+                          <div>
+                            <strong>
+                              {item.name} {item.dose}
+                            </strong>
+                            <p>{item.time}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+              if (card.kind === "memory") {
+                const memory = card as MemoryCardType;
+                return (
+                  <div key={card.id} className="surface-card patient-card memory-panel">
+                    <p className="card-kicker">Memory</p>
+                    <div className="memory-hero">
+                      <div className="memory-photo">{memory.photoHint}</div>
+                      <div>
+                        <h3>{memory.title}</h3>
+                        <p>{memory.relationship}</p>
+                      </div>
+                    </div>
+                    <p>{memory.story}</p>
+                  </div>
+                );
+              }
+              if (card.kind === "talk") {
+                return (
+                  <div key={card.id} className="surface-card patient-card">
+                    <p className="card-kicker">Gentle reply</p>
+                    <h3>{card.title}</h3>
+                    <p>{card.body}</p>
+                    <span className="pill">{card.suggestion}</span>
+                  </div>
+                );
+              }
+              return null;
+            })}
+        </section>
+
+        <aside className="patient-side">
+          <section className="surface-card patient-card">
+            <p className="card-kicker">Talk</p>
+            <h3>Ask me something gentle</h3>
+            <form
+              className="patient-talk-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (!prompt.trim()) return;
+                void sendMessage(prompt);
               }}
             >
-              Memory
-            </button>
+              <input
+                className="patient-input"
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+                placeholder="Ask me a simple question"
+              />
+              <div className="button-row">
+                <button className="primary-button" type="submit" disabled={busy}>
+                  {busy ? "Working..." : "Talk to me"}
+                </button>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setPrompt("I am fine!");
+                    void sendMessage("I am fine!");
+                  }}
+                >
+                  I am fine!
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section className="surface-card patient-card panic-shell">
+            <p className="card-kicker">Panic</p>
+            <h3>One calm button</h3>
             <button
-              className="primary-button"
+              className="panic-main"
+              type="button"
               onClick={() => {
-                setMode("panic");
-                setMusicMode(false);
-                void logEvent("panic", "Panic button pressed", "alert");
+                void sendMessage("__PANIC__");
               }}
             >
               PANIC
             </button>
-          </div>
-        }
-      />
+            <p>Press only if you need help.</p>
+          </section>
 
-      <section className="wrap">
-        {mode === "panic" ? (
-          <div className="two-col">
-            <section className="surface-card panic-card">
-              <p className="card-kicker">Calm mode</p>
-              <h2>You are safe at home. We are with you.</h2>
-              <p className="panic-copy">
-                Margaret, breathe slowly. We will take one step.
-              </p>
-              <div className="voice-card">
-                <p className="card-kicker">Voice</p>
-                <strong>ElevenLabs calm audio</strong>
-                <span>“Margaret, you are safe at home.”</span>
-              </div>
-            </section>
-
-            <section className="surface-card panel">
-              <h3>Choose one</h3>
-              <div className="options-grid">
-                {[
-                  ["Play music", "🎵"],
-                  ["Talk to me", "💬"],
-                  ["See family", "👪"],
-                  ["Breathe", "🌿"],
-                ].map(([label, icon]) => (
+          {panicCard && panicCard.kind === "panic" ? (
+            <section className="surface-card patient-card panic-shell">
+              <p className="card-kicker">Calm choices</p>
+              <h3>{panicCard.title}</h3>
+              <p>{panicCard.body}</p>
+              <div className="panic-actions">
+                {panicCard.options.map((option) => (
                   <button
-                    key={label}
+                    key={option.id}
                     className="panic-option"
+                    type="button"
                     onClick={() => {
-                      if (label === "Play music") {
-                        setMusicMode(true);
-                        void logEvent("panic_resolved", "Music started after panic");
+                      if (option.id === "fine") {
+                        void sendMessage("I am fine!");
+                        return;
                       }
+                      if (option.id === "music") {
+                        void sendMessage("play music");
+                        return;
+                      }
+                      if (option.id === "talk") {
+                        void sendMessage("talk to me");
+                        return;
+                      }
+                      void sendMessage("show family");
                     }}
                   >
-                    <span className="panic-icon">{icon}</span>
-                    <strong>{label}</strong>
-                    <span>One gentle step at a time.</span>
+                    <span>{option.icon}</span>
+                    <strong>{option.label}</strong>
+                    <small>{option.description}</small>
                   </button>
                 ))}
               </div>
             </section>
-          </div>
-        ) : (
-          <div className="two-col">
-            <section className="surface-card panel">
-              <div className="header-row">
-                <div>
-                  <p className="card-kicker">Morning briefing</p>
-                  <h2>
-                    {greeting.name}, {greeting.dateString}
-                  </h2>
-                </div>
-                <span className="location-badge">{greeting.weatherEmoji}</span>
-              </div>
+          ) : null}
 
-              <div className="split-cards">
-                <div className="memory-card">
-                  <p className="card-kicker">Memory</p>
-                  <h3>{memory.title}</h3>
-                  <p>{memory.story}</p>
-                </div>
-
-                <div className="memory-card">
-                  <p className="card-kicker">Medication</p>
-                  <h3>{meds.nextDueIn}</h3>
-                  <div className="stack">
-                    {meds.medications.map((med) => (
-                      <div key={`${med.name}-${med.time}`} className="mini-list-card">
-                        <strong>
-                          {med.name} {med.dose}
-                        </strong>
-                        <span>{med.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <h3>Today’s tasks</h3>
-              <div className="task-list">
-                {tasks.map((task) => (
-                  <div key={`${task.time}-${task.description}`} className="task-card">
-                    <span className="task-icon">{task.icon}</span>
-                    <div>
-                      <p className="card-kicker">{task.time}</p>
-                      <strong>{task.description}</strong>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="surface-card panel">
-              <div className="reassurance-card">
-                <p className="card-kicker">Reassurance</p>
-                <h3>You’re doing well, Margaret.</h3>
-                <p>One step. Then the next.</p>
-              </div>
-
-              <h3>Family</h3>
-              <div className="stack">
-                {DEMO_PROFILE.family_members.map((member) => (
-                  <div key={member.name} className="mini-list-card">
-                    <strong>{member.name}</strong>
-                    <span>
-                      {member.relationship} · {member.location}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                className="primary-button block"
-                onClick={() => {
-                  setMode("panic");
-                  void logEvent("panic", "Panic button pressed", "alert");
-                }}
-              >
-                PANIC
-              </button>
-            </section>
-          </div>
-        )}
-
-        {musicMode ? (
-          <section className="surface-card music-card">
-            <div className="header-row">
-              <div className="music-hero">
-                <span className="music-badge">🎙️</span>
-                <div>
-                  <p className="card-kicker">Music</p>
-                  <h3>Fly Me to the Moon</h3>
-                  <p>Frank Sinatra</p>
-                </div>
-              </div>
+          <section className="surface-card patient-card voice-card-shell">
+            <p className="card-kicker">Voice</p>
+            <h3>{voiceState === "speaking" ? "Speaking now" : "Ready"}</h3>
+            <p>{voiceText || "A calm voice will appear here."}</p>
+            <div className="voice-bars" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
             </div>
-            <p>Her favourite song for a gentle reset.</p>
-            <a
-              href={`https://www.youtube.com/results?search_query=${encodeURIComponent(
-                "Frank Sinatra Fly Me to the Moon",
-              )}`}
-              target="_blank"
-              rel="noreferrer"
-              className="primary-button inline"
-            >
-              Open YouTube search
-            </a>
+            <p className="muted">
+              {speechSupported ? "Browser voice is available." : "Voice is not available here."}
+            </p>
           </section>
-        ) : null}
+
+          {musicCard ? (
+            <section className="surface-card patient-card music-shell">
+              <p className="card-kicker">Music</p>
+              <h3>{musicCard.title}</h3>
+              <p>{musicCard.memoryTouch}</p>
+              <div className="track-meta">
+                <strong>{musicCard.artist}</strong>
+                <span>{musicCard.sourceName}</span>
+              </div>
+              <audio
+                ref={audioRef}
+                controls
+                onPlay={() => updateTrackStatus("playing")}
+                onWaiting={() => updateTrackStatus("buffering")}
+                onPause={() => updateTrackStatus("idle")}
+                onError={() => updateTrackStatus("error")}
+              />
+              <a
+                href={musicCard.sourceUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="card-link"
+              >
+                Open source
+              </a>
+            </section>
+          ) : null}
+        </aside>
       </section>
 
-      <Footer />
+      {logoutOpen ? (
+        <div className="modal-backdrop">
+          <section className="surface-card logout-modal">
+            <p className="card-kicker">Logout</p>
+            <h3>Enter the passcode</h3>
+            <p>This keeps logout safe if it happens by accident.</p>
+            <input
+              className="patient-input"
+              inputMode="numeric"
+              value={logoutPin}
+              onChange={(event) => {
+                setLogoutPin(event.target.value);
+                setLogoutError("");
+              }}
+              placeholder="Passcode"
+            />
+            {logoutError ? <p className="error-text">{logoutError}</p> : null}
+            <div className="button-row">
+              <button className="primary-button" type="button" onClick={confirmLogout}>
+                Confirm
+              </button>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => {
+                  setLogoutOpen(false);
+                  setLogoutPin("");
+                  setLogoutError("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
     </main>
   );
 }
-

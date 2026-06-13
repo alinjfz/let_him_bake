@@ -5,7 +5,6 @@ const nav = [
   { href: "/setup", label: "Setup" },
   { href: "/patient", label: "Patient" },
   { href: "/family", label: "Family" },
-  { href: "/research", label: "Research" },
 ];
 
 export function SiteNav({ active }: { active?: string }) {
@@ -66,14 +65,9 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
-        <p>
-          MemoryBridge demo, simplified for local build and easy setup.
-        </p>
-        <p>
-          Reference integration lives in the ignored `mydocs/starter-repo` tree.
-        </p>
+        <p>MemoryBridge demo, simplified for local build and easy setup.</p>
+        <p>Research now lives inside Family for a safer control flow.</p>
       </div>
     </footer>
   );
 }
-
