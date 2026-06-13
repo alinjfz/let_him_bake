@@ -1,4 +1,4 @@
-# MemoryBridge — AI Coding Agent Guide
+# Echoes — AI Coding Agent Guide
 
 > London A2A + A2UI Hackathon — June 13, 2026 — Google London (Central St Giles)
 > Team: Ali + teammate | Track 2: Generative UI | Stack: Next.js 15 + FastAPI + LangGraph
@@ -7,7 +7,7 @@
 
 ## What This App Is
 
-**MemoryBridge** is an Alzheimer's daily companion. A caregiver uploads a care plan PDF.
+**Echoes** is an Alzheimer's daily companion. A caregiver uploads a care plan PDF.
 The agent reads it and generates a completely personalised interface for the patient —
 different cognitive complexity, different content, different emotional tone — all from
 the same agent, all via A2UI generative UI. No two patients see the same screen.
@@ -63,7 +63,7 @@ src/
 │       ├── copilotkit-research/[[...slug]]/route.ts
 │       └── activity-log/route.ts
 ├── a2ui/
-│   ├── theme.css                                # MemoryBridge palette — edit HERE for colours
+│   ├── theme.css                                # Echoes palette — edit HERE for colours
 │   ├── catalog/
 │   │   ├── definitions.ts                       # All 8 component Zod schemas — ADD NEW COMPONENTS HERE
 │   │   ├── renderers.tsx                        # All 8 React renderers — ADD NEW RENDERERS HERE

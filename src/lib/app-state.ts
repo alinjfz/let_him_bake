@@ -4,7 +4,7 @@ import {
   type ActivityEvent,
   type Memory,
   type PatientProfile,
-} from "@/lib/memorybridge";
+} from "@/lib/echoes";
 
 export type Role = "patient" | "family";
 
@@ -179,7 +179,7 @@ function createInitialState(): AppState {
 }
 
 type StateHolder = typeof globalThis & {
-  __memorybridgeState?: AppState;
+  __echoesState?: AppState;
 };
 
 function getHolder() {
@@ -188,15 +188,15 @@ function getHolder() {
 
 export function getState(): AppState {
   const holder = getHolder();
-  if (!holder.__memorybridgeState) {
-    holder.__memorybridgeState = createInitialState();
+  if (!holder.__echoesState) {
+    holder.__echoesState = createInitialState();
   }
-  return cloneState(holder.__memorybridgeState);
+  return cloneState(holder.__echoesState);
 }
 
 export function setState(next: AppState) {
   const holder = getHolder();
-  holder.__memorybridgeState = cloneState(next);
+  holder.__echoesState = cloneState(next);
   return getState();
 }
 

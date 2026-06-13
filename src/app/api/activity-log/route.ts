@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import type { ActivityEvent } from "@/lib/memorybridge";
-import { initialActivityLog } from "@/lib/memorybridge";
+import type { ActivityEvent } from "@/lib/echoes";
+import { initialActivityLog } from "@/lib/echoes";
 
 const store: ActivityEvent[] = initialActivityLog();
 

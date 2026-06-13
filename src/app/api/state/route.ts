@@ -9,7 +9,7 @@ import {
   type AppState,
   type MemoryPolicy,
 } from "@/lib/app-state";
-import type { PatientProfile } from "@/lib/memorybridge";
+import type { PatientProfile } from "@/lib/echoes";
 
 export async function GET() {
   return NextResponse.json(getState());

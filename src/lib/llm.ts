@@ -1,4 +1,6 @@
-import { buildResearchAnswer } from "@/lib/memorybridge";
+import { buildResearchAnswer } from "@/lib/echoes";
+import type { MomentKind, MomentTheme, PatientMoment } from "@/lib/patient-moments";
+import type { PatientProfile } from "@/lib/echoes";
 
 export type EvidenceCard = {
   suggestion: string;
@@ -53,7 +55,7 @@ async function callOpenRouter(query: string): Promise<EvidenceCard | null> {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
       "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
-      "X-OpenRouter-Title": "MemoryBridge",
+      "X-OpenRouter-Title": "Echoes",
     },
     body: JSON.stringify({
       model,
@@ -133,5 +135,177 @@ export async function generateEvidenceCard(query: string): Promise<EvidenceCard>
   if (gemini) return gemini;
 
   return buildResearchAnswer(query);
+}
+
+type PatientMomentDraft = {
+  title?: string;
+  body?: string;
+  speakText?: string;
+  theme?: Partial<MomentTheme>;
+  okayLabel?: string;
+};
+
+function parsePatientMoment(raw: string): PatientMomentDraft | null {
+  try {
+    const parsed = JSON.parse(cleanJson(raw)) as PatientMomentDraft;
+    if (typeof parsed.title === "string" && typeof parsed.body === "string") {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+const PATIENT_SYSTEM_PROMPT = `You write for a patient companion app called Echoes.
+Rules:
+- Use only the patient's first name.
+- Max 10 words per sentence.
+- Never mention Alzheimer's, dementia, or diagnosis.
+- Warm, concrete, reassuring tone.
+- Keep title under 6 words and body under 2 short sentences.
+Return only JSON with keys: title, body, speakText, okayLabel, theme.
+theme must include: mood, accent (hex), surface (css gradient), text (hex), icon (emoji).`;
+
+async function callPatientLlm(prompt: string): Promise<PatientMomentDraft | null> {
+  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+  if (openrouterKey) {
+    const model = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";
+    const response = await fetch(OPENROUTER_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${openrouterKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
+        "X-OpenRouter-Title": "Echoes",
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: PATIENT_SYSTEM_PROMPT },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.4,
+      }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        choices?: Array<{ message?: { content?: string | null } }>;
+      };
+      const content = data.choices?.[0]?.message?.content;
+      if (typeof content === "string") {
+        const parsed = parsePatientMoment(content);
+        if (parsed) return parsed;
+      }
+    }
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY?.trim();
+  if (geminiKey) {
+    const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+    const response = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": geminiKey,
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: `${PATIENT_SYSTEM_PROMPT}\n\n${prompt}` }],
+          },
+        ],
+      }),
+    });
+    if (response.ok) {
+      const data = (await response.json()) as {
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+      };
+      const content = data.candidates?.[0]?.content?.parts
+        ?.map((part) => part.text ?? "")
+        .join("")
+        .trim();
+      if (content) {
+        const parsed = parsePatientMoment(content);
+        if (parsed) return parsed;
+      }
+    }
+  }
+
+  return null;
+}
+
+export async function generatePatientMoment(params: {
+  profile: PatientProfile;
+  kind: MomentKind;
+  contextJson: string;
+  step: number;
+  total: number;
+  fallback: PatientMoment;
+}): Promise<PatientMoment> {
+  if (process.env.OFFLINE === "1") return params.fallback;
+
+  const prompt = `Create one patient card.
+Kind: ${params.kind}
+Step ${params.step + 1} of ${params.total}
+Context: ${params.contextJson}`;
+
+  const draft = await callPatientLlm(prompt);
+  if (!draft?.title || !draft.body) return params.fallback;
+
+  const theme = draft.theme ?? params.fallback.theme;
+  return {
+    ...params.fallback,
+    title: draft.title,
+    body: draft.body,
+    speakText: draft.speakText ?? draft.body,
+    okayLabel: draft.okayLabel ?? params.fallback.okayLabel,
+    theme: {
+      mood: params.kind,
+      accent: theme.accent ?? params.fallback.theme.accent,
+      surface: theme.surface ?? params.fallback.theme.surface,
+      text: theme.text ?? params.fallback.theme.text,
+      icon: theme.icon ?? params.fallback.theme.icon,
+    },
+  };
+}
+
+export async function generatePatientAnswer(params: {
+  profile: PatientProfile;
+  question: string;
+  step: number;
+  total: number;
+  fallback: PatientMoment;
+}): Promise<PatientMoment> {
+  if (process.env.OFFLINE === "1") return params.fallback;
+
+  const prompt = `Answer the patient's spoken question.
+Question: ${params.question}
+Patient profile: ${JSON.stringify({
+    first_name: params.profile.first_name,
+    family_members: params.profile.family_members,
+    music_preference: params.profile.music_preference,
+    key_memories: params.profile.key_memories.map((m) => ({
+      title: m.title,
+      relationship: m.relationship,
+    })),
+  })}`;
+
+  const draft = await callPatientLlm(prompt);
+  if (!draft?.body) return params.fallback;
+
+  return {
+    ...params.fallback,
+    title: draft.title ?? "For you",
+    body: draft.body,
+    speakText: draft.speakText ?? draft.body,
+    theme: {
+      ...params.fallback.theme,
+      accent: draft.theme?.accent ?? params.fallback.theme.accent,
+      surface: draft.theme?.surface ?? params.fallback.theme.surface,
+      text: draft.theme?.text ?? params.fallback.theme.text,
+      icon: draft.theme?.icon ?? params.fallback.theme.icon,
+    },
+  };
 }
 

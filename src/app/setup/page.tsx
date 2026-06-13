@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Footer, PageHeader, SiteNav } from "@/components/Brand";
 import { extractPdfText } from "@/lib/pdf";
-import { DEMO_PROFILE, parseCarePlanText, type PatientProfile } from "@/lib/memorybridge";
+import { DEMO_PROFILE, parseCarePlanText, type PatientProfile } from "@/lib/echoes";
 
-const STORAGE_KEY = "memorybridge.profile";
+const STORAGE_KEY = "echoes.profile";
 
 export default function SetupPage() {
   const [profile, setProfile] = useState<PatientProfile>(DEMO_PROFILE);

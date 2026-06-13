@@ -12,7 +12,7 @@ import {
 } from "@/lib/app-state";
 import type { EvidenceCard } from "@/lib/llm";
 
-const ROLE_KEY = "memorybridge.role";
+const ROLE_KEY = "echoes.role";
 
 export default function FamilyPage() {
   const router = useRouter();

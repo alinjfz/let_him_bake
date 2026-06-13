@@ -4,7 +4,7 @@ This phase focused on simplifying the repo and making the app self-contained in 
 
 ## Completed
 
-- Built a simplified MemoryBridge app in the main repo.
+- Built a simplified Echoes app in the main repo.
 - Kept the starter repo only as a reference for correct integration patterns.
 - Removed the dependency on the `mydocs/` starter copy for runtime behavior.
 - Added the core app routes:

@@ -14,7 +14,7 @@ export function SiteNav({ active }: { active?: string }) {
         <Link href="/" className="brand">
           <span className="brand-mark">✦</span>
           <span>
-            <strong>MemoryBridge</strong>
+            <strong>Echoes</strong>
             <small>Gentle care, shaped live.</small>
           </span>
         </Link>
@@ -65,7 +65,7 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
-        <p>MemoryBridge demo, simplified for local build and easy setup.</p>
+        <p>Echoes demo, simplified for local build and easy setup.</p>
         <p>Research now lives inside Family for a safer control flow.</p>
       </div>
     </footer>

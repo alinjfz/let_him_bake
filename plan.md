@@ -1,4 +1,4 @@
-# MemoryBridge — Complete Implementation Plan
+# Echoes — Complete Implementation Plan
 
 ## London A2A + A2UI Hackathon, June 13 2026
 
@@ -88,7 +88,7 @@ project-root/
 │   │       ├── copilotkit-research/[[...slug]]/route.ts
 │   │       └── activity-log/route.ts
 │   ├── a2ui/
-│   │   ├── theme.css                # A2UI surface tokens (MemoryBridge palette)
+│   │   ├── theme.css                # A2UI surface tokens (Echoes palette)
 │   │   ├── catalog/
 │   │   │   ├── definitions.ts       # all component Zod schemas
 │   │   │   ├── renderers.tsx        # all React renderers
@@ -264,7 +264,7 @@ props: z.object({
 
 ## Theme — `src/a2ui/theme.css` + `src/components/patient/patient.css`
 
-MemoryBridge palette (accessible, warm, not clinical):
+Echoes palette (accessible, warm, not clinical):
 
 - `--primary`: `#2d6a9f` (NHS trust blue)
 - `--accent`: `#7ec8a4` (soft green — hope, calm)
@@ -485,7 +485,7 @@ Location: Leeds, LS1
 | Time      | Priority | Work                                                                                                                     |
 | --------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | 0:00–0:30 | P0       | Boot starter, verify A2UI works (drop any PDF, see MirrorRenderer fire). Then set up clean project structure.            |
-| 0:30–1:00 | P0       | Theme (patient.css + theme.css) + Brand.tsx rebrand → MemoryBridge shell looks right                                     |
+| 0:30–1:00 | P0       | Theme (patient.css + theme.css) + Brand.tsx rebrand → Echoes shell looks right                                     |
 | 1:00–2:00 | P0       | `pdf_tools.py` care plan extractor + `setup_agent.py` → upload margaret PDF → see structured JSON                        |
 | 2:00–3:00 | P0       | 8 A2UI component definitions + renderers (start with PatientGreeting, MemoryCard, DailyTask — the morning briefing trio) |
 | 3:00–3:30 | P0       | `patient_agent.py` morning briefing mode → `/patient` renders Margaret's surface from her care plan                      |

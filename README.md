@@ -1,6 +1,6 @@
-# MemoryBridge
+# Echoes
 
-MemoryBridge is a simplified, self-contained demo app for the London A2A + A2UI hackathon.
+Echoes is a simplified, self-contained demo app for the London A2A + A2UI hackathon.
 
 The root repo now contains the lightweight version:
 - `/setup` for PDF upload and profile review
@@ -67,7 +67,7 @@ If you later wire in the full agent stack, those keys are the first ones to fill
 
 ## What to edit
 
-- `src/lib/memorybridge.ts` for demo data and helper logic
+- `src/lib/echoes.ts` for demo data and helper logic
 - `src/app/setup/page.tsx` for upload and profile parsing
 - `src/app/patient/page.tsx` for the adaptive patient view
 - `src/app/family/page.tsx` for the activity/status screen
