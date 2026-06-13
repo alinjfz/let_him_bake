@@ -168,71 +168,86 @@ Return only JSON with keys: title, body, speakText, okayLabel, theme.
 theme must include: mood, accent (hex), surface (css gradient), text (hex), icon (emoji).`;
 
 async function callPatientLlm(prompt: string): Promise<PatientMomentDraft | null> {
-  const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
-  if (openrouterKey) {
-    const model = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";
-    const response = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${openrouterKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
-        "X-OpenRouter-Title": "Echoes",
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: PATIENT_SYSTEM_PROMPT },
-          { role: "user", content: prompt },
-        ],
-        temperature: 0.4,
-      }),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as {
-        choices?: Array<{ message?: { content?: string | null } }>;
-      };
-      const content = data.choices?.[0]?.message?.content;
-      if (typeof content === "string") {
-        const parsed = parsePatientMoment(content);
-        if (parsed) return parsed;
+  const timeoutMs = 8000;
+
+  const run = async (): Promise<PatientMomentDraft | null> => {
+    const openrouterKey = process.env.OPENROUTER_API_KEY?.trim();
+    if (openrouterKey) {
+      const model = process.env.OPENROUTER_MODEL?.trim() || "openai/gpt-4o-mini";
+      const response = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openrouterKey}`,
+          "Content-Type": "application/json",
+          "HTTP-Referer": process.env.APP_URL?.trim() || "http://localhost:3000",
+          "X-OpenRouter-Title": "Echoes",
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: PATIENT_SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.4,
+        }),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as {
+          choices?: Array<{ message?: { content?: string | null } }>;
+        };
+        const content = data.choices?.[0]?.message?.content;
+        if (typeof content === "string") {
+          const parsed = parsePatientMoment(content);
+          if (parsed) return parsed;
+        }
       }
     }
-  }
 
-  const geminiKey = process.env.GEMINI_API_KEY?.trim();
-  if (geminiKey) {
-    const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
-    const response = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": geminiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [{ text: `${PATIENT_SYSTEM_PROMPT}\n\n${prompt}` }],
-          },
-        ],
-      }),
-    });
-    if (response.ok) {
-      const data = (await response.json()) as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-      };
-      const content = data.candidates?.[0]?.content?.parts
-        ?.map((part) => part.text ?? "")
-        .join("")
-        .trim();
-      if (content) {
-        const parsed = parsePatientMoment(content);
-        if (parsed) return parsed;
+    const geminiKey = process.env.GEMINI_API_KEY?.trim();
+    if (geminiKey) {
+      const model = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
+      const response = await fetch(`${GEMINI_BASE}/${model}:generateContent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": geminiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: `${PATIENT_SYSTEM_PROMPT}\n\n${prompt}` }],
+            },
+          ],
+        }),
+      });
+      if (response.ok) {
+        const data = (await response.json()) as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        };
+        const content = data.candidates?.[0]?.content?.parts
+          ?.map((part) => part.text ?? "")
+          .join("")
+          .trim();
+        if (content) {
+          const parsed = parsePatientMoment(content);
+          if (parsed) return parsed;
+        }
       }
     }
-  }
 
-  return null;
+    return null;
+  };
+
+  try {
+    return await Promise.race([
+      run(),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), timeoutMs);
+      }),
+    ]);
+  } catch {
+    return null;
+  }
 }
 
 export async function generatePatientMoment(params: {

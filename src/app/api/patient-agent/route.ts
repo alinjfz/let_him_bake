@@ -8,6 +8,17 @@ import {
   momentSpecContext,
   type PatientMoment,
 } from "@/lib/patient-moments";
+import { activatePatient, connectPatient, getActiveRecord } from "@/lib/patient-store";
+
+function bindPatientSession(accessCode: string, pin?: string) {
+  if (!accessCode) return Boolean(getActiveRecord());
+
+  if (pin) {
+    return Boolean(connectPatient(accessCode, pin));
+  }
+
+  return Boolean(activatePatient(accessCode));
+}
 
 function nowTimestamp() {
   return new Intl.DateTimeFormat("en-GB", {
@@ -70,8 +81,16 @@ async function resolveMoment(step: number): Promise<PatientMoment> {
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as
-    | { action?: string; step?: number; message?: string }
+    | { action?: string; step?: number; message?: string; accessCode?: string; pin?: string }
     | null;
+
+  const accessCode =
+    typeof body?.accessCode === "string" ? body.accessCode.trim().toUpperCase() : "";
+  const pin = typeof body?.pin === "string" ? body.pin.trim() : "";
+
+  if (accessCode && !bindPatientSession(accessCode, pin || undefined)) {
+    return NextResponse.json({ error: "Patient not found." }, { status: 404 });
+  }
 
   const action = body?.action ?? "wake";
   const step = typeof body?.step === "number" ? body.step : 0;

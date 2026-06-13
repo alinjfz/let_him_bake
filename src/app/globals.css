@@ -1071,6 +1071,14 @@ textarea {
   color: #7a6f8a;
 }
 
+.caretaker-code {
+  margin: 0.35rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #4a7fb8;
+}
+
 .caretaker-meta {
   margin: 0.35rem 0 0;
   font-size: 0.92rem;
@@ -1468,8 +1476,89 @@ textarea {
   z-index: 40;
 }
 
-.logout-modal,
+.patient-preview-stage {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.patient-preview-stage .patient-moment-card {
+  width: min(100%, 28rem);
+  animation: none;
+}
+
 .patient-preview-modal {
+  width: min(36rem, 100%);
+  max-height: min(92vh, 820px);
+  overflow: auto;
+  display: grid;
+  gap: 1rem;
+  padding: 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: calc(var(--radius) + 8px);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 28px 60px rgba(45, 60, 80, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+.patient-leave-modal {
+  width: min(24rem, 100%);
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: calc(var(--radius) + 8px);
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 28px 60px rgba(45, 60, 80, 0.18);
+  backdrop-filter: blur(16px);
+}
+
+.patient-leave-title {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--text);
+}
+
+.patient-leave-body {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+.patient-leave-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.patient-leave-cancel,
+.patient-leave-confirm {
+  border: none;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.patient-leave-cancel {
+  background: var(--surface-soft);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.patient-leave-confirm {
+  background: var(--primary);
+  color: #fff;
+}
+
+.patient-leave-cancel:disabled,
+.patient-leave-confirm:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.logout-modal {
   width: min(960px, 100%);
   max-height: min(90vh, 920px);
   overflow: auto;

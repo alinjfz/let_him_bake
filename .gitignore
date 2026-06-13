@@ -24,6 +24,7 @@ ENV/
 *.sqlite
 *.sqlite3
 data/
+.echoes/
 
 # macOS
 .DS_Store

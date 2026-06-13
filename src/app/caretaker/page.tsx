@@ -1,26 +1,31 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PatientMomentCard } from "@/components/PatientMomentCard";
 import type { AppState, MemoryPolicy } from "@/lib/app-state";
 import {
   createEmptyMemory,
   createEmptyProfile,
   createMemoryId,
-  DEMO_PROFILE,
   parseCarePlanText,
   type Memory,
   type PatientProfile,
-  type Stage,
 } from "@/lib/echoes";
+import type { PatientMoment } from "@/lib/patient-moments";
+import {
+  clearSession,
+  readSession,
+  stateBody,
+  stateQuery,
+  writeCaretakerSession,
+} from "@/lib/session";
 import { extractPdfText } from "@/lib/pdf";
 
-const ROLE_KEY = "echoes.role";
-
-type OnboardingStep = "welcome" | "patient" | "import" | "memories" | "routine" | "preferences" | "done";
+type OnboardingStep = "patient" | "import" | "memories" | "routine" | "preferences" | "done";
+type AuthMode = "choose" | "create" | "connect";
 
 const ONBOARDING_STEPS: OnboardingStep[] = [
-  "welcome",
   "patient",
   "import",
   "memories",
@@ -48,41 +53,78 @@ function syncFirstName(profile: PatientProfile): PatientProfile {
 export default function CaretakerPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authMode, setAuthMode] = useState<AuthMode>("choose");
   const [onboarding, setOnboarding] = useState(true);
-  const [step, setStep] = useState<OnboardingStep>("welcome");
+  const [step, setStep] = useState<OnboardingStep>("patient");
   const [profile, setProfile] = useState<PatientProfile>(createEmptyProfile());
   const [policies, setPolicies] = useState<Record<string, MemoryPolicy>>({});
   const [activity, setActivity] = useState<AppState["activity"]>([]);
+  const [accessCode, setAccessCode] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [dashboardTab, setDashboardTab] = useState<"memories" | "routine" | "about">("memories");
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewMoment, setPreviewMoment] = useState<PatientMoment | null>(null);
+  const [previewStep, setPreviewStep] = useState(0);
+  const [previewBusy, setPreviewBusy] = useState(false);
 
-  async function loadState() {
-    const response = await fetch("/api/state").catch(() => null);
-    if (!response?.ok) return;
+  const [caretakerName, setCaretakerName] = useState("");
+  const [pin, setPin] = useState("");
+  const [connectCode, setConnectCode] = useState("");
+
+  const loadState = useCallback(async () => {
+    const session = readSession();
+    if (!session.patientCode || !session.caretakerPin) {
+      setAuthenticated(false);
+      setReady(true);
+      return;
+    }
+
+    const response = await fetch(`/api/state?${stateQuery(session)}`).catch(() => null);
+    if (!response?.ok) {
+      if (response?.status === 401 || response?.status === 404) {
+        clearSession();
+        setStatus("Your saved home was not found. Create or connect again.");
+      }
+      setAuthenticated(false);
+      setReady(true);
+      return;
+    }
+
     const data = (await response.json().catch(() => null)) as AppState | null;
-    if (!data) return;
+    if (!data) {
+      setAuthenticated(false);
+      setReady(true);
+      return;
+    }
+
     setProfile(data.profile);
     setPolicies(data.memoryPolicies);
     setActivity(data.activity);
+    setAccessCode(data.accessCode);
     setOnboarding(!data.onboardingComplete);
+    setAuthenticated(true);
     setReady(true);
-  }
+  }, []);
 
   async function persist(nextProfile: PatientProfile, complete = false, nextPolicies = policies) {
+    const session = readSession();
     setBusy(true);
     setStatus("Saving...");
     const synced = syncFirstName(nextProfile);
     const response = await fetch("/api/state", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        profile: synced,
-        state: {
-          memoryPolicies: nextPolicies,
-          onboardingComplete: complete ? true : undefined,
-        },
-      }),
+      body: JSON.stringify(
+        stateBody(session, {
+          profile: synced,
+          state: {
+            memoryPolicies: nextPolicies,
+            onboardingComplete: complete ? true : undefined,
+          },
+        }),
+      ),
     }).catch(() => null);
     setBusy(false);
     if (!response?.ok) {
@@ -94,36 +136,139 @@ export default function CaretakerPage() {
       setProfile(data.profile);
       setPolicies(data.memoryPolicies);
       setActivity(data.activity);
+      setAccessCode(data.accessCode);
       if (complete) setOnboarding(false);
     }
     setStatus(complete ? "All set." : "Saved.");
     return true;
   }
 
-  useEffect(() => {
-    const stored = window.localStorage.getItem(ROLE_KEY);
-    if (stored === "family") {
-      window.localStorage.setItem(ROLE_KEY, "caretaker");
-    }
-    const role = stored === "family" ? "caretaker" : stored;
-    if (role && role !== "caretaker") {
-      router.push(role === "patient" ? "/patient" : "/");
+  async function handleAuthCreate() {
+    if (!caretakerName.trim() || pin.trim().length < 4) {
+      setStatus("Add your name and a passcode of at least 4 characters.");
       return;
     }
-    void loadState();
-  }, [router]);
+    setBusy(true);
+    setStatus("");
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        caretakerName: caretakerName.trim(),
+        pin: pin.trim(),
+      }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      setStatus(data?.error ?? "Could not create patient.");
+      return;
+    }
+    const data = (await response.json()) as { accessCode: string; state: AppState };
+    writeCaretakerSession({
+      accessCode: data.accessCode,
+      pin: pin.trim(),
+      caretakerName: caretakerName.trim(),
+    });
+    setAccessCode(data.accessCode);
+    setProfile(data.state.profile);
+    setPolicies(data.state.memoryPolicies);
+    setOnboarding(true);
+    setStep("patient");
+    setAuthenticated(true);
+    setStatus(`Patient code: ${data.accessCode}`);
+  }
+
+  async function handleAuthConnect() {
+    if (!connectCode.trim() || pin.trim().length < 4) {
+      setStatus("Enter the patient code and passcode.");
+      return;
+    }
+    setBusy(true);
+    setStatus("");
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "connect",
+        accessCode: connectCode.trim(),
+        pin: pin.trim(),
+      }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      setStatus(data?.error ?? "Could not connect.");
+      return;
+    }
+    const data = (await response.json()) as { accessCode: string; state: AppState };
+    writeCaretakerSession({
+      accessCode: data.accessCode,
+      pin: pin.trim(),
+      caretakerName: caretakerName.trim() || "Caretaker",
+    });
+    setAccessCode(data.accessCode);
+    setProfile(data.state.profile);
+    setPolicies(data.state.memoryPolicies);
+    setActivity(data.state.activity);
+    setOnboarding(!data.state.onboardingComplete);
+    setAuthenticated(true);
+    setStatus(`Connected to ${data.accessCode}.`);
+  }
+
+  async function loadDemoData() {
+    const session = readSession();
+    if (!session.caretakerPin) {
+      setStatus("Sign in first.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Loading demo data...");
+    const response = await fetch("/api/auth", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "loadDemo",
+        pin: session.caretakerPin,
+        demoId: "george-thomas",
+      }),
+    });
+    setBusy(false);
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      setStatus(data?.error ?? "Demo load failed.");
+      return;
+    }
+    const data = (await response.json()) as { state: AppState };
+    setProfile(data.state.profile);
+    setPolicies(data.state.memoryPolicies);
+    setActivity(data.state.activity);
+    setOnboarding(true);
+    setStep("patient");
+    setStatus("George Thomas demo loaded from demo_data.");
+  }
 
   useEffect(() => {
-    if (onboarding) return;
+    const session = readSession();
+    if (session.role && session.role !== "caretaker") {
+      router.push(session.role === "patient" ? "/patient" : "/");
+      return;
+    }
+    setCaretakerName(session.caretakerName);
+    setPin(session.caretakerPin);
+    setConnectCode(session.patientCode);
+    void loadState();
+  }, [router, loadState]);
+
+  useEffect(() => {
+    if (!authenticated || onboarding) return;
     const timer = window.setInterval(() => void loadState(), 5000);
     return () => window.clearInterval(timer);
-  }, [onboarding]);
+  }, [authenticated, onboarding, loadState]);
 
   const stepIndex = ONBOARDING_STEPS.indexOf(step);
   const latestEvent = activity[0];
-
-  const memoryCount = profile.key_memories.length;
-  const taskCount = profile.daily_tasks.length;
 
   async function handlePdf(file: File) {
     setStatus(`Reading ${file.name}...`);
@@ -139,12 +284,6 @@ export default function CaretakerPage() {
     }
   }
 
-  function useDemoProfile() {
-    setProfile(DEMO_PROFILE);
-    setPolicies(buildPolicies(DEMO_PROFILE));
-    setStatus("Demo profile loaded.");
-  }
-
   function addMemory() {
     setProfile((current) => ({
       ...current,
@@ -158,9 +297,7 @@ export default function CaretakerPage() {
       key_memories: current.key_memories.map((memory, i) => {
         if (i !== index) return memory;
         const next = { ...memory, ...patch };
-        if (patch.title && !patch.id) {
-          next.id = createMemoryId(patch.title);
-        }
+        if (patch.title && !patch.id) next.id = createMemoryId(patch.title);
         return next;
       }),
     }));
@@ -176,20 +313,14 @@ export default function CaretakerPage() {
   function addTask() {
     setProfile((current) => ({
       ...current,
-      daily_tasks: [
-        ...current.daily_tasks,
-        { time: "9:00 AM", description: "A gentle step", icon: "✨" },
-      ],
+      daily_tasks: [...current.daily_tasks, { time: "9:00 AM", description: "A gentle step", icon: "✨" }],
     }));
   }
 
   function addMedication() {
     setProfile((current) => ({
       ...current,
-      medications: [
-        ...current.medications,
-        { name: "Medicine", dose: "1 tablet", time: "Morning" },
-      ],
+      medications: [...current.medications, { name: "Medicine", dose: "1 tablet", time: "Morning" }],
     }));
   }
 
@@ -200,10 +331,54 @@ export default function CaretakerPage() {
     await persist(synced, true, nextPolicies);
   }
 
+  const loadPreviewMoment = useCallback(
+    async (action: "wake" | "advance" | "moment", nextStep: number) => {
+      const session = readSession();
+      if (!session.patientCode || !session.caretakerPin) return;
+      setPreviewBusy(true);
+      try {
+        const response = await fetch("/api/patient-agent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action,
+            step: nextStep,
+            accessCode: session.patientCode,
+            pin: session.caretakerPin,
+          }),
+        });
+        if (!response.ok) throw new Error("preview failed");
+        const data = (await response.json()) as { moment?: PatientMoment };
+        if (!data.moment) throw new Error("missing moment");
+        setPreviewMoment(data.moment);
+        setPreviewStep(data.moment.step);
+      } catch {
+        setStatus("Preview could not load. Save your changes and try again.");
+        setPreviewOpen(false);
+      } finally {
+        setPreviewBusy(false);
+      }
+    },
+    [],
+  );
+
+  async function openPatientPreview() {
+    const saved = await persist(profile, false, buildPolicies(profile));
+    if (!saved) return;
+    setPreviewOpen(true);
+    setPreviewMoment(null);
+    setPreviewStep(0);
+    await loadPreviewMoment("wake", 0);
+  }
+
+  async function handlePreviewOkay() {
+    if (previewBusy || !previewMoment) return;
+    if (previewMoment.kind === "done" || !previewMoment.showOkay) return;
+    await loadPreviewMoment("advance", previewStep);
+  }
+
   const onboardingTitle = useMemo(() => {
     switch (step) {
-      case "welcome":
-        return "Welcome to Echoes";
       case "patient":
         return "Who are you caring for?";
       case "import":
@@ -230,11 +405,106 @@ export default function CaretakerPage() {
     );
   }
 
+  if (!authenticated) {
+    return (
+      <main className="caretaker-shell">
+        <div className="caretaker-bg" aria-hidden="true" />
+        <div className="caretaker-inner">
+          <header className="caretaker-header">
+            <span className="home-brand-mark">✦</span>
+            <h1>Caretaker sign in</h1>
+            <p className="caretaker-lead">Create a new patient or connect to one that already exists.</p>
+          </header>
+
+          <section className="caretaker-card">
+            {authMode === "choose" && (
+              <div className="caretaker-stack">
+                <button className="caretaker-primary" type="button" onClick={() => setAuthMode("create")}>
+                  Create a new patient
+                </button>
+                <button className="caretaker-secondary" type="button" onClick={() => setAuthMode("connect")}>
+                  Connect to existing patient
+                </button>
+              </div>
+            )}
+
+            {authMode === "create" && (
+              <div className="caretaker-form">
+                <label>
+                  Your name
+                  <input
+                    className="caretaker-input"
+                    value={caretakerName}
+                    onChange={(e) => setCaretakerName(e.target.value)}
+                    placeholder="Helen"
+                  />
+                </label>
+                <label>
+                  Passcode (4+ characters)
+                  <input
+                    className="caretaker-input"
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="••••"
+                  />
+                </label>
+              </div>
+            )}
+
+            {authMode === "connect" && (
+              <div className="caretaker-form">
+                <label>
+                  Patient code
+                  <input
+                    className="caretaker-input"
+                    value={connectCode}
+                    onChange={(e) => setConnectCode(e.target.value.toUpperCase())}
+                    placeholder="ECHO-7K2M"
+                  />
+                </label>
+                <label>
+                  Passcode
+                  <input
+                    className="caretaker-input"
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="••••"
+                  />
+                </label>
+              </div>
+            )}
+
+            {status ? <p className="caretaker-status">{status}</p> : null}
+
+            <div className="caretaker-actions">
+              {authMode !== "choose" ? (
+                <button className="caretaker-secondary" type="button" onClick={() => setAuthMode("choose")}>
+                  Back
+                </button>
+              ) : null}
+              {authMode === "create" ? (
+                <button className="caretaker-primary" type="button" disabled={busy} onClick={() => void handleAuthCreate()}>
+                  {busy ? "Creating..." : "Create patient"}
+                </button>
+              ) : null}
+              {authMode === "connect" ? (
+                <button className="caretaker-primary" type="button" disabled={busy} onClick={() => void handleAuthConnect()}>
+                  {busy ? "Connecting..." : "Connect"}
+                </button>
+              ) : null}
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+
   if (onboarding) {
     return (
       <main className="caretaker-shell">
         <div className="caretaker-bg" aria-hidden="true" />
-
         <div className="caretaker-inner">
           <header className="caretaker-header">
             <span className="home-brand-mark">✦</span>
@@ -242,15 +512,10 @@ export default function CaretakerPage() {
               Step {stepIndex + 1} of {ONBOARDING_STEPS.length}
             </p>
             <h1>{onboardingTitle}</h1>
+            {accessCode ? <p className="caretaker-code">Patient code: {accessCode}</p> : null}
           </header>
 
           <section className="caretaker-card">
-            {step === "welcome" && (
-              <p className="caretaker-lead">
-                Set up one patient profile. Echoes will greet them with warmth using what you add here.
-              </p>
-            )}
-
             {step === "patient" && (
               <div className="caretaker-form">
                 <label>
@@ -259,7 +524,7 @@ export default function CaretakerPage() {
                     className="caretaker-input"
                     value={profile.name}
                     onChange={(e) => setProfile({ ...profile, name: e.target.value })}
-                    placeholder="Margaret Thompson"
+                    placeholder="George Thomas"
                   />
                 </label>
                 <label>
@@ -268,9 +533,7 @@ export default function CaretakerPage() {
                     className="caretaker-input"
                     type="number"
                     value={profile.age || ""}
-                    onChange={(e) =>
-                      setProfile({ ...profile, age: Number(e.target.value) || 0 })
-                    }
+                    onChange={(e) => setProfile({ ...profile, age: Number(e.target.value) || 0 })}
                   />
                 </label>
                 <label>
@@ -279,31 +542,15 @@ export default function CaretakerPage() {
                     className="caretaker-input"
                     value={profile.location_area}
                     onChange={(e) => setProfile({ ...profile, location_area: e.target.value })}
-                    placeholder="Leeds"
+                    placeholder="Bristol"
                   />
-                </label>
-                <label>
-                  Support stage
-                  <select
-                    className="caretaker-input"
-                    value={profile.stage}
-                    onChange={(e) =>
-                      setProfile({ ...profile, stage: e.target.value as Stage })
-                    }
-                  >
-                    <option value="early">Early</option>
-                    <option value="mid">Mid</option>
-                    <option value="late">Late</option>
-                  </select>
                 </label>
               </div>
             )}
 
             {step === "import" && (
               <div className="caretaker-form">
-                <p className="caretaker-lead">
-                  Upload a care plan PDF, try the demo, or skip and fill things in by hand.
-                </p>
+                <p className="caretaker-lead">Upload a care plan PDF, load demo data, or skip and fill things in by hand.</p>
                 <label className="caretaker-upload">
                   <strong>Upload PDF</strong>
                   <span>We read it locally on your device.</span>
@@ -316,8 +563,8 @@ export default function CaretakerPage() {
                     }}
                   />
                 </label>
-                <button className="caretaker-secondary" type="button" onClick={useDemoProfile}>
-                  Use demo profile
+                <button className="caretaker-secondary" type="button" disabled={busy} onClick={() => void loadDemoData()}>
+                  Load demo data (George Thomas)
                 </button>
               </div>
             )}
@@ -352,11 +599,7 @@ export default function CaretakerPage() {
                         placeholder="Emoji"
                         onChange={(e) => updateMemory(index, { photoHint: e.target.value })}
                       />
-                      <button
-                        className="caretaker-text-btn"
-                        type="button"
-                        onClick={() => removeMemory(index)}
-                      >
+                      <button className="caretaker-text-btn" type="button" onClick={() => removeMemory(index)}>
                         Remove
                       </button>
                     </div>
@@ -402,7 +645,6 @@ export default function CaretakerPage() {
                 <button className="caretaker-secondary" type="button" onClick={addTask}>
                   Add a step
                 </button>
-
                 <p className="caretaker-kicker">Medications</p>
                 {profile.medications.map((med, index) => (
                   <article key={`med-${index}`} className="caretaker-item caretaker-row">
@@ -457,31 +699,23 @@ export default function CaretakerPage() {
                   <input
                     className="caretaker-input"
                     value={profile.music_preference}
-                    onChange={(e) =>
-                      setProfile({ ...profile, music_preference: e.target.value })
-                    }
-                    placeholder="Frank Sinatra"
+                    onChange={(e) => setProfile({ ...profile, music_preference: e.target.value })}
                   />
                 </label>
                 <label>
-                  Loved ones (name, relationship)
+                  Loved one name
                   <input
                     className="caretaker-input"
                     value={profile.family_members[0]?.name ?? ""}
                     onChange={(e) => {
-                      const name = e.target.value;
                       const member = profile.family_members[0] ?? {
                         name: "",
                         relationship: "family",
                         age: 0,
                         location: profile.location_area,
                       };
-                      setProfile({
-                        ...profile,
-                        family_members: [{ ...member, name }],
-                      });
+                      setProfile({ ...profile, family_members: [{ ...member, name: e.target.value }] });
                     }}
-                    placeholder="Sarah"
                   />
                 </label>
                 <input
@@ -515,7 +749,6 @@ export default function CaretakerPage() {
                           .filter(Boolean),
                       })
                     }
-                    placeholder="Yorkshire tea, gardening"
                   />
                 </label>
               </div>
@@ -526,9 +759,10 @@ export default function CaretakerPage() {
                 <p className="caretaker-lead">
                   {profile.first_name || profile.name || "Your patient"} is ready.
                 </p>
+                <p className="caretaker-code">Share this code on the patient device: {accessCode}</p>
                 <ul className="caretaker-summary">
-                  <li>{memoryCount} memories</li>
-                  <li>{taskCount} daily steps</li>
+                  <li>{profile.key_memories.length} memories</li>
+                  <li>{profile.daily_tasks.length} daily steps</li>
                   <li>{profile.medications.length} medications</li>
                 </ul>
               </div>
@@ -538,21 +772,12 @@ export default function CaretakerPage() {
 
             <div className="caretaker-actions">
               {stepIndex > 0 && step !== "done" ? (
-                <button
-                  className="caretaker-secondary"
-                  type="button"
-                  onClick={() => setStep(ONBOARDING_STEPS[stepIndex - 1])}
-                >
+                <button className="caretaker-secondary" type="button" onClick={() => setStep(ONBOARDING_STEPS[stepIndex - 1])}>
                   Back
                 </button>
               ) : null}
               {step === "done" ? (
-                <button
-                  className="caretaker-primary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void finishOnboarding()}
-                >
+                <button className="caretaker-primary" type="button" disabled={busy} onClick={() => void finishOnboarding()}>
                   {busy ? "Saving..." : "Open caretaker home"}
                 </button>
               ) : (
@@ -575,12 +800,12 @@ export default function CaretakerPage() {
   return (
     <main className="caretaker-shell">
       <div className="caretaker-bg" aria-hidden="true" />
-
       <div className="caretaker-inner caretaker-dashboard">
         <header className="caretaker-header caretaker-header-row">
           <div>
             <p className="caretaker-eyebrow">Caretaker</p>
             <h1>{profile.first_name || profile.name}</h1>
+            <p className="caretaker-code">Patient code: {accessCode}</p>
             <p className="caretaker-meta">
               {latestEvent ? `${latestEvent.description} · ${latestEvent.timestamp}` : "All quiet right now."}
             </p>
@@ -589,7 +814,7 @@ export default function CaretakerPage() {
             className="caretaker-text-btn"
             type="button"
             onClick={() => {
-              window.localStorage.removeItem(ROLE_KEY);
+              clearSession();
               router.push("/");
             }}
           >
@@ -688,9 +913,7 @@ export default function CaretakerPage() {
                 <input
                   className="caretaker-input"
                   value={profile.music_preference}
-                  onChange={(e) =>
-                    setProfile({ ...profile, music_preference: e.target.value })
-                  }
+                  onChange={(e) => setProfile({ ...profile, music_preference: e.target.value })}
                 />
               </label>
               <label>
@@ -698,25 +921,12 @@ export default function CaretakerPage() {
                 <input
                   className="caretaker-input"
                   value={profile.location_area}
-                  onChange={(e) =>
-                    setProfile({ ...profile, location_area: e.target.value })
-                  }
+                  onChange={(e) => setProfile({ ...profile, location_area: e.target.value })}
                 />
               </label>
-              <label>
-                Stage
-                <select
-                  className="caretaker-input"
-                  value={profile.stage}
-                  onChange={(e) =>
-                    setProfile({ ...profile, stage: e.target.value as Stage })
-                  }
-                >
-                  <option value="early">Early</option>
-                  <option value="mid">Mid</option>
-                  <option value="late">Late</option>
-                </select>
-              </label>
+              <button className="caretaker-secondary" type="button" disabled={busy} onClick={() => void loadDemoData()}>
+                Load demo data (George Thomas)
+              </button>
             </div>
           )}
 
@@ -731,16 +941,45 @@ export default function CaretakerPage() {
             >
               {busy ? "Saving..." : "Save changes"}
             </button>
-            <button
-              className="caretaker-secondary"
-              type="button"
-              onClick={() => router.push("/patient")}
-            >
+            <button className="caretaker-secondary" type="button" onClick={() => void openPatientPreview()}>
               Preview patient view
             </button>
           </div>
         </section>
       </div>
+
+      {previewOpen ? (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Patient preview">
+          <section className="patient-preview-modal caretaker-card">
+            <div className="caretaker-header-row">
+              <div>
+                <p className="caretaker-eyebrow">Patient preview</p>
+                <h2>{profile.first_name || profile.name || "Patient"}</h2>
+                <p className="caretaker-meta">This is what they see, one card at a time.</p>
+              </div>
+              <button className="caretaker-text-btn" type="button" onClick={() => setPreviewOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="patient-preview-stage">
+              {previewMoment ? (
+                <PatientMomentCard
+                  moment={previewMoment}
+                  busy={previewBusy}
+                  onOkay={() => void handlePreviewOkay()}
+                />
+              ) : (
+                <article className="patient-moment-card mood-greeting">
+                  <p className="patient-moment-body">
+                    {previewBusy ? "Loading preview..." : "No preview yet."}
+                  </p>
+                </article>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </main>
   );
 }

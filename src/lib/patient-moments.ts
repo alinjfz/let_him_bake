@@ -234,7 +234,7 @@ export function fallbackAskMoment(
   const firstName = profile.first_name;
   let body = `I am here with you, ${firstName}.`;
 
-  if (/child|daughter|son|sarah|james/.test(lower)) {
+  if (/child|daughter|son|grand/.test(lower) || profile.family_members.some((m) => lower.includes(m.name.toLowerCase()))) {
     const person =
       profile.family_members.find((member) => lower.includes(member.name.toLowerCase())) ??
       profile.family_members[0];
@@ -243,10 +243,15 @@ export function fallbackAskMoment(
     }
   } else if (/who am i|my name/.test(lower)) {
     body = `You are ${firstName}. You are safe at home.`;
-  } else if (/music|song|sinatra/.test(lower)) {
+  } else if (/music|song/.test(lower) && profile.music_preference) {
     body = `You love ${profile.music_preference}. That music can feel like home.`;
-  } else if (/cat|whiskers/.test(lower)) {
-    body = "Whiskers is nearby. A gentle friend at home.";
+  } else {
+    const pet = profile.family_members.find((member) =>
+      /cat|dog|pet/i.test(member.relationship),
+    );
+    if (pet && lower.includes(pet.name.toLowerCase())) {
+      body = `${pet.name} is nearby. A gentle friend at home.`;
+    }
   }
 
   return {

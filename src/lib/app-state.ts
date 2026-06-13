@@ -1,31 +1,33 @@
 import {
-  DEMO_ACTIVITY,
-  DEMO_PROFILE,
   createEmptyProfile,
   type ActivityEvent,
   type Memory,
   type PatientProfile,
 } from "@/lib/echoes";
+import {
+  buildMemoryPoliciesFromProfile,
+  defaultMemoryPolicy,
+  firstFamilyName,
+  type MemoryPolicy,
+  type MusicTrack,
+  type PatientMode,
+  type PlaybackStatus,
+} from "@/lib/app-state-helpers";
+import {
+  createEmptyAppState,
+  getActiveRecord,
+  recordToAppState,
+  setActiveRecord,
+  updateActiveRecord,
+} from "@/lib/patient-store";
+
+export type { MemoryPolicy, PatientMode, PlaybackStatus, MusicTrack } from "@/lib/app-state-helpers";
 
 export type Role = "patient" | "caretaker";
 
-export type MemoryPolicy = "show" | "soften" | "redirect" | "hide";
-
-export type PatientMode = "home" | "talk" | "panic" | "music";
-
-export type PlaybackStatus = "idle" | "buffering" | "playing" | "error";
-
-export interface MusicTrack {
-  title: string;
-  artist: string;
-  sourceName: string;
-  sourceUrl: string;
-  streamUrl: string;
-  memoryTouch: string;
-  status: PlaybackStatus;
-}
-
 export interface AppState {
+  accessCode: string;
+  caretakerName: string;
   profile: PatientProfile;
   activity: ActivityEvent[];
   memoryPolicies: Record<string, MemoryPolicy>;
@@ -123,17 +125,8 @@ export interface PatientViewModel {
 
 const MUSIC_URL = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
 
-const defaultMemoryPolicy = (memory: Memory): MemoryPolicy => {
-  if (/wife|husband|partner/i.test(memory.relationship)) return "redirect";
-  return "show";
-};
-
 function makeActivityId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
-}
-
-function cloneState(state: AppState): AppState {
-  return JSON.parse(JSON.stringify(state)) as AppState;
 }
 
 function memoryArt(memory: Memory) {
@@ -162,92 +155,84 @@ function memoryArt(memory: Memory) {
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
-function buildMemoryPolicies(profile: PatientProfile) {
-  return Object.fromEntries(
-    profile.key_memories.map((memory) => [memory.id, defaultMemoryPolicy(memory)]),
-  ) as Record<string, MemoryPolicy>;
-}
-
-function createInitialState(): AppState {
+function applyPartialToRecord(
+  record: NonNullable<ReturnType<typeof getActiveRecord>>,
+  partial: Partial<AppState>,
+) {
   return {
-    profile: createEmptyProfile(),
-    activity: [],
-    memoryPolicies: {},
-    caregiverPin: "2468",
-    currentMode: "home",
-    currentTrack: null,
-    patientPrompt: "",
-    onboardingComplete: false,
+    ...record,
+    profile: partial.profile ?? record.profile,
+    activity: partial.activity ?? record.activity,
+    memoryPolicies: partial.memoryPolicies ?? record.memoryPolicies,
+    caregiverPin: partial.caregiverPin ?? record.caregiverPin,
+    currentTrack: partial.currentTrack ?? record.currentTrack,
+    currentMode: partial.currentMode ?? record.currentMode,
+    patientPrompt: partial.patientPrompt ?? record.patientPrompt,
+    onboardingComplete: partial.onboardingComplete ?? record.onboardingComplete,
+    caretakerName: partial.caretakerName ?? record.caretakerName,
   };
-}
-
-type StateHolder = typeof globalThis & {
-  __echoesState?: AppState;
-};
-
-function getHolder() {
-  return globalThis as StateHolder;
 }
 
 export function getState(): AppState {
-  const holder = getHolder();
-  if (!holder.__echoesState) {
-    holder.__echoesState = createInitialState();
-  }
-  const state = cloneState(holder.__echoesState);
-  return {
-    ...state,
-    onboardingComplete: state.onboardingComplete ?? false,
-  };
+  const record = getActiveRecord();
+  if (!record) return createEmptyAppState();
+  return recordToAppState(record);
 }
 
 export function setState(next: AppState) {
-  const holder = getHolder();
-  holder.__echoesState = cloneState(next);
+  const record = getActiveRecord();
+  if (!record) return createEmptyAppState();
+  setActiveRecord({
+    ...record,
+    profile: next.profile,
+    activity: next.activity,
+    memoryPolicies: next.memoryPolicies,
+    caregiverPin: next.caregiverPin,
+    currentMode: next.currentMode,
+    currentTrack: next.currentTrack,
+    patientPrompt: next.patientPrompt,
+    onboardingComplete: next.onboardingComplete,
+    caretakerName: next.caretakerName,
+    accessCode: next.accessCode || record.accessCode,
+  });
   return getState();
 }
 
 export function patchState(partial: Partial<AppState>) {
-  const current = getState();
-  const next: AppState = {
-    ...current,
-    ...partial,
-    profile: partial.profile ?? current.profile,
-    activity: partial.activity ?? current.activity,
-    memoryPolicies: partial.memoryPolicies ?? current.memoryPolicies,
-    caregiverPin: partial.caregiverPin ?? current.caregiverPin,
-    currentTrack: partial.currentTrack ?? current.currentTrack,
-    currentMode: partial.currentMode ?? current.currentMode,
-    patientPrompt: partial.patientPrompt ?? current.patientPrompt,
-    onboardingComplete: partial.onboardingComplete ?? current.onboardingComplete ?? false,
-  };
-  return setState(next);
+  const record = getActiveRecord();
+  if (!record) return createEmptyAppState();
+  setActiveRecord(applyPartialToRecord(record, partial));
+  return getState();
 }
 
 export function resetState(profile?: PatientProfile) {
-  const nextProfile = profile ?? DEMO_PROFILE;
-  return setState({
+  const record = getActiveRecord();
+  if (!record) return createEmptyAppState();
+  const nextProfile = profile ?? createEmptyProfile();
+  setActiveRecord({
+    ...record,
     profile: nextProfile,
-    activity: DEMO_ACTIVITY.map((event) => ({ ...event })),
-    memoryPolicies: buildMemoryPolicies(nextProfile),
-    caregiverPin: "2468",
+    activity: [],
+    memoryPolicies: buildMemoryPoliciesFromProfile(nextProfile),
     currentMode: "home",
     currentTrack: null,
     patientPrompt: "",
-    onboardingComplete: true,
+    onboardingComplete: Boolean(profile),
   });
+  return getState();
 }
 
 export function saveProfile(profile: PatientProfile) {
-  const next = getState();
-  next.profile = profile;
-  next.memoryPolicies = buildMemoryPolicies(profile);
-  return setState(next);
+  return patchState({
+    profile,
+    memoryPolicies: buildMemoryPoliciesFromProfile(profile),
+  });
 }
 
 export function updateActivity(event: Omit<ActivityEvent, "id"> & { id?: string }) {
-  const next = getState();
-  next.activity = [
+  const record = getActiveRecord();
+  if (!record) return createEmptyAppState();
+  const activity = [
     {
       id: event.id ?? makeActivityId("activity"),
       timestamp: event.timestamp,
@@ -255,9 +240,9 @@ export function updateActivity(event: Omit<ActivityEvent, "id"> & { id?: string 
       description: event.description,
       severity: event.severity,
     },
-    ...next.activity,
+    ...record.activity,
   ];
-  return setState(next);
+  return patchState({ activity });
 }
 
 function cleanText(input: string) {
@@ -267,15 +252,16 @@ function cleanText(input: string) {
     .trim();
 }
 
-function safeMemoryStory(memory: Memory, policy: MemoryPolicy) {
+function safeMemoryStory(memory: Memory, policy: MemoryPolicy, profile: PatientProfile) {
   const story = cleanText(memory.story);
+  const familyName = firstFamilyName(profile);
 
   if (policy === "hide") {
     return "Here is something gentle from your life.";
   }
 
   if (policy === "redirect") {
-    return "Would you like to call Sarah or see a happy photo?";
+    return `Would you like to call ${familyName} or see a happy photo?`;
   }
 
   if (policy === "soften") {
@@ -286,49 +272,46 @@ function safeMemoryStory(memory: Memory, policy: MemoryPolicy) {
 }
 
 function getMusicTrack(profile: PatientProfile): MusicTrack {
+  const preference = profile.music_preference.trim();
   return {
-    title: "Fly Me to the Moon",
-    artist: profile.music_preference || "Frank Sinatra",
+    title: preference || "A favourite song",
+    artist: preference || "Someone they love",
     sourceName: "SoundHelix",
     sourceUrl: "https://www.soundhelix.com/",
     streamUrl: MUSIC_URL,
-    memoryTouch: `${profile.first_name} likes ${profile.music_preference || "Frank Sinatra"}.`,
+    memoryTouch: preference
+      ? `${profile.first_name} loves ${preference}.`
+      : `${profile.first_name} loves familiar music.`,
     status: "idle",
   };
 }
 
 export function setMusicTrack(profile: PatientProfile) {
-  const next = getState();
-  next.currentTrack = getMusicTrack(profile);
-  return setState(next);
+  return patchState({ currentTrack: getMusicTrack(profile) });
 }
 
 export function setPlaybackStatus(status: PlaybackStatus) {
-  const next = getState();
-  if (!next.currentTrack) return next;
-  next.currentTrack = { ...next.currentTrack, status };
-  return setState(next);
+  const state = getState();
+  if (!state.currentTrack) return state;
+  return patchState({ currentTrack: { ...state.currentTrack, status } });
 }
 
 export function setPatientPrompt(prompt: string) {
-  const next = getState();
-  next.patientPrompt = prompt;
-  return setState(next);
+  return patchState({ patientPrompt: prompt });
 }
 
 export function setPatientMode(mode: PatientMode) {
-  const next = getState();
-  next.currentMode = mode;
-  return setState(next);
+  return patchState({ currentMode: mode });
 }
 
 export function updateMemoryPolicy(memoryId: string, policy: MemoryPolicy) {
-  const next = getState();
-  next.memoryPolicies = {
-    ...next.memoryPolicies,
-    [memoryId]: policy,
-  };
-  return setState(next);
+  const state = getState();
+  return patchState({
+    memoryPolicies: {
+      ...state.memoryPolicies,
+      [memoryId]: policy,
+    },
+  });
 }
 
 export function buildPatientView(
@@ -336,6 +319,7 @@ export function buildPatientView(
   prompt = state.patientPrompt,
 ): PatientViewModel {
   const profile = state.profile;
+  const familyName = firstFamilyName(profile);
   const greetingDate = new Intl.DateTimeFormat("en-GB", {
     weekday: "long",
     day: "numeric",
@@ -347,7 +331,7 @@ export function buildPatientView(
     {
       id: "greeting",
       kind: "greeting",
-      title: `Hello, ${profile.first_name}`,
+      title: `Hello, ${profile.first_name || "friend"}`,
       subtitle: greetingDate,
     },
     {
@@ -363,14 +347,12 @@ export function buildPatientView(
 
   const chosenMemory =
     profile.key_memories.find((memory) =>
-      sensitive
-        ? /wife|husband|partner/i.test(memory.relationship)
-        : true,
+      sensitive ? /wife|husband|partner/i.test(memory.relationship) : true,
     ) ?? profile.key_memories[0];
 
   if (chosenMemory) {
     const policy = state.memoryPolicies[chosenMemory.id] ?? defaultMemoryPolicy(chosenMemory);
-    const safeStory = safeMemoryStory(chosenMemory, policy);
+    const safeStory = safeMemoryStory(chosenMemory, policy, profile);
 
     if (policy !== "hide" || !sensitive) {
       cards.push({
@@ -381,32 +363,36 @@ export function buildPatientView(
         photoHint: chosenMemory.photoHint,
         relationship: chosenMemory.relationship,
         policy,
-        imageUrl: memoryArt(chosenMemory),
+        imageUrl: createMemoryImage(chosenMemory),
       });
     }
   }
 
-  const taskCount = profile.stage === "early" ? 2 : profile.stage === "late" ? 1 : 2;
-  cards.push({
-    id: "tasks",
-    kind: "tasks",
-    title: "Today",
-    items: profile.daily_tasks.slice(0, taskCount),
-  });
+  const taskCount = Math.min(profile.daily_tasks.length, 2);
+  if (taskCount > 0) {
+    cards.push({
+      id: "tasks",
+      kind: "tasks",
+      title: "Today",
+      items: profile.daily_tasks.slice(0, taskCount),
+    });
+  }
 
-  cards.push({
-    id: "medication",
-    kind: "medication",
-    title: "Medication",
-    items: profile.medications.map((med, index) => ({
-      ...med,
-      taken: index === 0,
-    })),
-  });
+  if (profile.medications.length > 0) {
+    cards.push({
+      id: "medication",
+      kind: "medication",
+      title: "Medication",
+      items: profile.medications.map((med, index) => ({
+        ...med,
+        taken: index === 0,
+      })),
+    });
+  }
 
   if (/panic|scared|help|lost|afraid/.test(question)) {
     return {
-      heading: `Hello, ${profile.first_name}`,
+      heading: `Hello, ${profile.first_name || "friend"}`,
       prompt,
       mode: "panic",
       cards: [
@@ -433,7 +419,7 @@ export function buildPatientView(
             {
               id: "family",
               label: "See family",
-              description: "Bring Sarah or James closer.",
+              description: `Bring ${familyName} closer.`,
               icon: "👪",
             },
             {
@@ -448,7 +434,7 @@ export function buildPatientView(
     };
   }
 
-  if (/music|song|sing|sinatra/.test(question)) {
+  if (/music|song|sing/.test(question)) {
     const track = getMusicTrack(profile);
     cards.push({
       id: "music",
@@ -467,13 +453,13 @@ export function buildPatientView(
       id: "talk",
       kind: "talk",
       title: "Let’s keep this gentle.",
-      body: "Would you like to see Sarah, a photo, or music?",
-      suggestion: "Call Sarah or open a warm memory.",
+      body: `Would you like to see ${familyName}, a photo, or music?`,
+      suggestion: `Call ${familyName} or open a warm memory.`,
     });
   }
 
   return {
-    heading: `Hello, ${profile.first_name}`,
+    heading: `Hello, ${profile.first_name || "friend"}`,
     prompt,
     mode: state.currentMode,
     cards,
@@ -485,5 +471,8 @@ export function createMusicTrack(profile: PatientProfile) {
 }
 
 export function createMemoryImage(memory: Memory) {
+  if (memory.photoPath) return memory.photoPath;
   return memoryArt(memory);
 }
+
+export { updateActiveRecord, getActiveRecord, recordToAppState } from "@/lib/patient-store";
