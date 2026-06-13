@@ -781,13 +781,121 @@ textarea {
   color: #4a7562;
 }
 
+.research-shell,
+.family-shell {
+  min-height: 100dvh;
+}
+
+.research-inner,
+.family-inner {
+  width: min(1100px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2rem 0 3rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.research-grid,
+.family-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.research-chat {
+  min-height: 28rem;
+}
+
+.research-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.research-quick button {
+  border: 1px solid var(--border);
+  background: var(--surface-soft);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.family-log {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.family-log li {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 1rem;
+  background: var(--surface-soft);
+}
+
+.family-log li.alert {
+  background: #fff4e5;
+  border: 1px solid #f0c987;
+}
+
+.family-status {
+  font-size: 1.35rem;
+  font-weight: 800;
+  margin: 0;
+}
+
+.sponsor-footer {
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  border-radius: calc(var(--radius) + 4px);
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--border);
+}
+
+.sponsor-title {
+  margin: 0 0 0.65rem;
+  font-size: 0.85rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.sponsor-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  font-weight: 700;
+  color: var(--primary);
+}
+
+@media (max-width: 900px) {
+  .research-grid,
+  .family-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .patient-focus-shell {
   position: relative;
   display: flex;
-  min-height: 100vh;
+  min-height: 100dvh;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
+  overflow: hidden;
+  background:
+    linear-gradient(165deg, #fdf9f4 0%, #f6f0e8 40%, #ebe6f4 100%);
+}
+
+.patient-shell {
+  position: relative;
+  min-height: 100dvh;
   overflow: hidden;
   background:
     linear-gradient(165deg, #fdf9f4 0%, #f6f0e8 40%, #ebe6f4 100%);

@@ -70,3 +70,19 @@ export function Footer() {
     </footer>
   );
 }
+
+export function SponsorFooter() {
+  return (
+    <footer className="sponsor-footer">
+      <p className="sponsor-title">Powered by our hackathon partners</p>
+      <div className="sponsor-grid">
+        <span>CopilotKit + AG-UI</span>
+        <span>Google A2UI</span>
+        <span>Linkup</span>
+        <span>ElevenLabs</span>
+        <span>Google Gemini</span>
+        <span>Redis</span>
+      </div>
+    </footer>
+  );
+}

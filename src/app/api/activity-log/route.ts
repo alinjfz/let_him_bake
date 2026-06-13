@@ -1,21 +1,27 @@
 import { NextResponse } from "next/server";
 import { getState } from "@/lib/app-state";
 import { activatePatient, connectPatient } from "@/lib/patient-store";
+import { resolveCaretakerToken } from "@/lib/server-auth";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const accessCode = searchParams.get("accessCode")?.trim().toUpperCase() ?? "";
   const pin = searchParams.get("pin")?.trim() ?? "";
+  const token = searchParams.get("token")?.trim() ?? "";
 
-  if (accessCode && pin && !connectPatient(accessCode, pin)) {
+  if (token) {
+    const session = await resolveCaretakerToken(request);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+  } else if (accessCode && pin && !connectPatient(accessCode, pin)) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
-
-  if (accessCode && !pin && !activatePatient(accessCode)) {
+  } else if (accessCode && !pin && !activatePatient(accessCode)) {
     return NextResponse.json({ error: "Patient not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ events: getState().activity });
+  const activity = getState().activity;
+  return NextResponse.json({ activity, events: activity });
 }
 
 export async function POST(request: Request) {

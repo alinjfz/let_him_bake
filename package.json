@@ -3,17 +3,28 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "next dev",
+    "dev": "concurrently -n web,agent -c blue,green \"pnpm dev:web\" \"pnpm agent\"",
+    "dev:web": "next dev",
+    "agent": "cd agent && python3 -m uvicorn main:app --reload --host 0.0.0.0 --port 8123",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "doctor": "node --experimental-strip-types scripts/doctor.ts",
+    "smoke": "node --experimental-strip-types scripts/smoke.ts"
   },
   "dependencies": {
+    "@ag-ui/client": "^0.0.57",
+    "@copilotkit/react-core": "^1.60.1",
+    "@copilotkit/react-ui": "^1.60.1",
+    "@copilotkit/runtime": "^1.60.1",
+    "concurrently": "^10.0.3",
     "next": "16.1.6",
+    "openai": "^6.42.0",
     "pdfjs-dist": "^4.10.38",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "redis": "^6.0.0"
+    "redis": "^6.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",

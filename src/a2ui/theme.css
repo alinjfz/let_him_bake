@@ -1,0 +1,142 @@
+.a2ui-canvas {
+  display: grid;
+  gap: 1rem;
+  width: 100%;
+}
+
+.a2ui-pill {
+  justify-self: center;
+  padding: 0.35rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #2d6a9f;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(45, 106, 159, 0.2);
+  box-shadow: 0 8px 24px rgba(45, 60, 80, 0.08);
+}
+
+.a2ui-stack {
+  display: grid;
+  gap: 1rem;
+}
+
+.a2ui-card {
+  display: grid;
+  gap: 0.75rem;
+  padding: clamp(1.25rem, 4vw, 2rem);
+  border-radius: calc(var(--radius) + 6px);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 20px 48px rgba(45, 60, 80, 0.1);
+  text-align: center;
+}
+
+.a2ui-greeting h1,
+.a2ui-memory h2,
+.a2ui-task p,
+.a2ui-medication h2,
+.a2ui-music h2,
+.a2ui-evidence h2,
+.a2ui-calming h1 {
+  margin: 0;
+  line-height: 1.1;
+}
+
+.a2ui-emoji {
+  font-size: 2.4rem;
+}
+
+.a2ui-memory-photo {
+  width: min(100%, 16rem);
+  margin: 0 auto;
+  aspect-ratio: 4 / 3;
+  border-radius: 1rem;
+  overflow: hidden;
+}
+
+.a2ui-memory-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.a2ui-task-time,
+.a2ui-meta {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.a2ui-med-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.a2ui-panic-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.a2ui-panic-btn {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: none;
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--panic-color, #5b9fd4) 14%, white);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+}
+
+.a2ui-panic-btn strong {
+  font-size: 1.05rem;
+}
+
+.a2ui-calming {
+  background: linear-gradient(155deg, #f0f7ff 0%, #f4faf7 100%);
+  min-height: 12rem;
+  place-content: center;
+}
+
+.a2ui-link {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.a2ui-confidence {
+  justify-self: center;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+}
+
+.a2ui-confidence.high {
+  color: #2d6a9f;
+}
+
+.a2ui-confidence.medium {
+  color: #7a6248;
+}
+
+.a2ui-empty {
+  padding: 2rem;
+  text-align: center;
+  color: var(--muted);
+}
+
+.a2ui-evidence footer {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.a2ui-evidence cite {
+  font-style: normal;
+  font-weight: 700;
+}

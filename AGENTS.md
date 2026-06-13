@@ -1,5 +1,7 @@
 # Echoes — AI Coding Agent Guide
 
+> **Demo script + judging:** see [HACKATHON.md](./HACKATHON.md) · **Patient flow:** CopilotKit v2 → AG-UI → Python `:8123/patient` → `patient-step-service.ts` (one A2UI card per step)
+
 > London A2A + A2UI Hackathon — June 13, 2026 — Google London (Central St Giles)
 > Team: Ali + teammate | Track 2: Generative UI | Stack: Next.js 15 + FastAPI + LangGraph
 

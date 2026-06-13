@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PatientMomentCard } from "@/components/PatientMomentCard";
+import { MirrorRenderer, parseA2UISurface } from "@/a2ui/MirrorRenderer";
+import "@/a2ui/theme.css";
 import type { AppState, MemoryPolicy } from "@/lib/app-state";
 import {
   createEmptyMemory,
@@ -12,7 +13,7 @@ import {
   type Memory,
   type PatientProfile,
 } from "@/lib/echoes";
-import type { PatientMoment } from "@/lib/patient-moments";
+import type { PatientStepPayload } from "@/lib/patient-step-service";
 import {
   clearSession,
   readSession,
@@ -66,8 +67,8 @@ export default function CaretakerPage() {
   const [busy, setBusy] = useState(false);
   const [dashboardTab, setDashboardTab] = useState<"memories" | "routine" | "about">("memories");
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewMoment, setPreviewMoment] = useState<PatientMoment | null>(null);
-  const [previewStep, setPreviewStep] = useState(0);
+  const [previewPayload, setPreviewPayload] = useState<PatientStepPayload | null>(null);
+  const [previewIndex, setPreviewIndex] = useState(0);
   const [previewBusy, setPreviewBusy] = useState(false);
 
   const [caretakerName, setCaretakerName] = useState("");
@@ -341,7 +342,7 @@ export default function CaretakerPage() {
       if (!session.patientCode || !session.caretakerToken) return;
       setPreviewBusy(true);
       try {
-        const response = await fetch("/api/patient-agent", {
+        const response = await fetch("/api/patient-a2ui", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -354,10 +355,9 @@ export default function CaretakerPage() {
           }),
         });
         if (!response.ok) throw new Error("preview failed");
-        const data = (await response.json()) as { moment?: PatientMoment };
-        if (!data.moment) throw new Error("missing moment");
-        setPreviewMoment(data.moment);
-        setPreviewStep(data.moment.step);
+        const data = (await response.json()) as PatientStepPayload;
+        setPreviewPayload(data);
+        setPreviewIndex(data.step);
       } catch {
         setStatus("Preview could not load. Save your changes and try again.");
         setPreviewOpen(false);
@@ -372,15 +372,15 @@ export default function CaretakerPage() {
     const saved = await persist(profile, false, buildPolicies(profile));
     if (!saved) return;
     setPreviewOpen(true);
-    setPreviewMoment(null);
-    setPreviewStep(0);
+    setPreviewPayload(null);
+    setPreviewIndex(0);
     await loadPreviewMoment("wake", 0);
   }
 
   async function handlePreviewOkay() {
-    if (previewBusy || !previewMoment) return;
-    if (previewMoment.kind === "done" || !previewMoment.showOkay) return;
-    await loadPreviewMoment("advance", previewStep);
+    if (previewBusy || !previewPayload) return;
+    if (!previewPayload.showOkay) return;
+    await loadPreviewMoment("advance", previewIndex);
   }
 
   const onboardingTitle = useMemo(() => {
@@ -924,6 +924,14 @@ export default function CaretakerPage() {
               <button className="caretaker-secondary" type="button" disabled={busy} onClick={() => void loadDemoData()}>
                 Load demo data (George Thomas)
               </button>
+              <div className="caretaker-row">
+                <a className="caretaker-secondary" href="/research">
+                  Open research (Linkup)
+                </a>
+                <a className="caretaker-secondary" href="/family">
+                  Family activity log
+                </a>
+              </div>
             </div>
           )}
 
@@ -960,12 +968,26 @@ export default function CaretakerPage() {
             </div>
 
             <div className="patient-preview-stage">
-              {previewMoment ? (
-                <PatientMomentCard
-                  moment={previewMoment}
-                  busy={previewBusy}
-                  onOkay={() => void handlePreviewOkay()}
-                />
+              {previewPayload ? (
+                <>
+                  <MirrorRenderer
+                    surface={parseA2UISurface(previewPayload.surface)}
+                    single
+                    step={previewPayload.step}
+                    total={previewPayload.total}
+                    theme={previewPayload.theme}
+                  />
+                  {previewPayload.showOkay ? (
+                    <button
+                      className="patient-moment-okay"
+                      type="button"
+                      disabled={previewBusy}
+                      onClick={() => void handlePreviewOkay()}
+                    >
+                      {previewBusy ? "One moment..." : previewPayload.okayLabel}
+                    </button>
+                  ) : null}
+                </>
               ) : (
                 <article className="patient-moment-card mood-greeting">
                   <p className="patient-moment-body">
