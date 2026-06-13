@@ -3,9 +3,8 @@
 Echoes is a simplified, self-contained demo app for the London A2A + A2UI hackathon.
 
 The root repo now contains the lightweight version:
-- `/setup` for PDF upload and profile review
+- `/caretaker` for onboarding, shaping memories, and patient profile
 - `/patient` for the adaptive patient surface
-- `/family` for activity and status
 - `/research` for quick caregiver guidance
 
 The ignored `mydocs/starter-repo` folder is kept as a reference implementation for the full CopilotKit + A2UI + FastAPI stack. When we need the correct integration pattern, we can compare against that starter.

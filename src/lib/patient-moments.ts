@@ -95,6 +95,9 @@ function londonHour() {
 function pickNextTask(profile: PatientProfile): DailyTask {
   const hour = londonHour();
   const tasks = profile.daily_tasks;
+  if (!tasks.length) {
+    return { time: "Now", description: "Take one slow breath.", icon: "🌿" };
+  }
   if (hour < 10) return tasks[0] ?? tasks[tasks.length - 1];
   if (hour < 13) return tasks[1] ?? tasks[0];
   if (hour < 16) return tasks[2] ?? tasks[tasks.length - 1];

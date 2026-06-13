@@ -55,6 +55,41 @@ export interface ActivityEvent {
   severity: "normal" | "alert";
 }
 
+export function createEmptyProfile(): PatientProfile {
+  return {
+    name: "",
+    first_name: "",
+    age: 70,
+    stage: "mid",
+    daily_tasks: [],
+    medications: [],
+    key_memories: [],
+    family_members: [],
+    music_preference: "",
+    other_preferences: [],
+    location_area: "",
+  };
+}
+
+export function createMemoryId(title: string) {
+  const slug = title
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  return slug || `memory-${Date.now()}`;
+}
+
+export function createEmptyMemory(): Memory {
+  return {
+    id: createMemoryId(`memory-${Date.now()}`),
+    title: "",
+    story: "",
+    photoHint: "✨",
+    relationship: "",
+  };
+}
+
 export const DEMO_PROFILE: PatientProfile = {
   name: "Margaret Thompson",
   first_name: "Margaret",

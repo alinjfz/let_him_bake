@@ -2,9 +2,8 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const nav = [
-  { href: "/setup", label: "Setup" },
+  { href: "/caretaker", label: "Caretaker" },
   { href: "/patient", label: "Patient" },
-  { href: "/family", label: "Family" },
 ];
 
 export function SiteNav({ active }: { active?: string }) {
@@ -15,7 +14,7 @@ export function SiteNav({ active }: { active?: string }) {
           <span className="brand-mark">✦</span>
           <span>
             <strong>Echoes</strong>
-            <small>Gentle care, shaped live.</small>
+            <small>Memories that stay close.</small>
           </span>
         </Link>
         <nav className="nav-links">
@@ -65,8 +64,8 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="wrap footer-inner">
-        <p>Echoes demo, simplified for local build and easy setup.</p>
-        <p>Research now lives inside Family for a safer control flow.</p>
+        <p>Echoes — shaped by the people who care.</p>
+        <p>Patient view stays calm. Caretaker shapes the memories.</p>
       </div>
     </footer>
   );

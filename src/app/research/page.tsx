@@ -7,12 +7,12 @@ export default function ResearchPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/family");
+    router.replace("/caretaker");
   }, [router]);
 
   return (
     <main className="wrap" style={{ padding: "4rem 0" }}>
-      Redirecting research to the family control room.
+      Redirecting to the caretaker home.
     </main>
   );
 }

@@ -7,9 +7,9 @@ const ROLE_KEY = "echoes.role";
 export default function HomePage() {
   const router = useRouter();
 
-  function enter(role: "patient" | "family") {
+  function enter(role: "patient" | "caretaker") {
     window.localStorage.setItem(ROLE_KEY, role);
-    router.push(role === "patient" ? "/patient" : "/family");
+    router.push(role === "patient" ? "/patient" : "/caretaker");
   }
 
   return (
@@ -38,7 +38,7 @@ export default function HomePage() {
             <button
               className="home-login-btn caretaker"
               type="button"
-              onClick={() => enter("family")}
+              onClick={() => enter("caretaker")}
             >
               <span className="home-login-label">Caretaker</span>
               <span className="home-login-sub">Family, friends &amp; loved ones</span>

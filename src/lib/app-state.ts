@@ -1,12 +1,13 @@
 import {
   DEMO_ACTIVITY,
   DEMO_PROFILE,
+  createEmptyProfile,
   type ActivityEvent,
   type Memory,
   type PatientProfile,
 } from "@/lib/echoes";
 
-export type Role = "patient" | "family";
+export type Role = "patient" | "caretaker";
 
 export type MemoryPolicy = "show" | "soften" | "redirect" | "hide";
 
@@ -32,6 +33,7 @@ export interface AppState {
   currentMode: PatientMode;
   currentTrack: MusicTrack | null;
   patientPrompt: string;
+  onboardingComplete: boolean;
 }
 
 export interface PatientCardBase {
@@ -168,13 +170,14 @@ function buildMemoryPolicies(profile: PatientProfile) {
 
 function createInitialState(): AppState {
   return {
-    profile: DEMO_PROFILE,
-    activity: DEMO_ACTIVITY,
-    memoryPolicies: buildMemoryPolicies(DEMO_PROFILE),
+    profile: createEmptyProfile(),
+    activity: [],
+    memoryPolicies: {},
     caregiverPin: "2468",
     currentMode: "home",
     currentTrack: null,
     patientPrompt: "",
+    onboardingComplete: false,
   };
 }
 
@@ -191,7 +194,11 @@ export function getState(): AppState {
   if (!holder.__echoesState) {
     holder.__echoesState = createInitialState();
   }
-  return cloneState(holder.__echoesState);
+  const state = cloneState(holder.__echoesState);
+  return {
+    ...state,
+    onboardingComplete: state.onboardingComplete ?? false,
+  };
 }
 
 export function setState(next: AppState) {
@@ -212,6 +219,7 @@ export function patchState(partial: Partial<AppState>) {
     currentTrack: partial.currentTrack ?? current.currentTrack,
     currentMode: partial.currentMode ?? current.currentMode,
     patientPrompt: partial.patientPrompt ?? current.patientPrompt,
+    onboardingComplete: partial.onboardingComplete ?? current.onboardingComplete ?? false,
   };
   return setState(next);
 }
@@ -226,6 +234,7 @@ export function resetState(profile?: PatientProfile) {
     currentMode: "home",
     currentTrack: null,
     patientPrompt: "",
+    onboardingComplete: true,
   });
 }
 

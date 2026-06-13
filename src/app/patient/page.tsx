@@ -117,8 +117,12 @@ export default function PatientPage() {
   useEffect(() => {
     setVoiceSupported(Boolean(getSpeechRecognition()));
     const stored = window.localStorage.getItem(ROLE_KEY);
-    if (stored && stored !== "patient") {
-      router.push(stored === "family" ? "/family" : "/");
+    if (stored === "family") {
+      window.localStorage.setItem(ROLE_KEY, "caretaker");
+    }
+    const role = stored === "family" ? "caretaker" : stored;
+    if (role && role !== "patient") {
+      router.push(role === "caretaker" ? "/caretaker" : "/");
       return;
     }
     spokeRef.current = "";
