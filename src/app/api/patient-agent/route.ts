@@ -43,12 +43,12 @@ export async function POST(request: Request) {
   }
 
   if (lower.includes("i am fine") || lower.includes("i'm fine") || lower === "__fine__") {
-    setPatientMode("home");
+    setPatientMode("panic");
     setPatientPrompt(message);
     updateActivity({
       timestamp: nowTimestamp(),
       type: "panic_resolved",
-      description: "Patient said they are fine",
+      description: "Patient said they feel calmer",
       severity: "normal",
     });
     const view = buildPatientView(getState(), message);

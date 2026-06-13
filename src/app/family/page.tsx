@@ -1,27 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Footer } from "@/components/Brand";
 import {
+  buildPatientView,
+  createMemoryImage,
   type AppState,
   type MemoryPolicy,
+  type PatientViewModel,
 } from "@/lib/app-state";
 import type { EvidenceCard } from "@/lib/llm";
 
 const ROLE_KEY = "memorybridge.role";
 
-function blankState(): AppState | null {
-  return null;
-}
-
 export default function FamilyPage() {
   const router = useRouter();
-  const [state, setState] = useState<AppState | null>(blankState());
+  const [state, setState] = useState<AppState | null>(null);
   const [draftProfile, setDraftProfile] = useState<AppState["profile"] | null>(null);
   const [draftPolicies, setDraftPolicies] = useState<Record<string, MemoryPolicy>>({});
   const [expandedLog, setExpandedLog] = useState(true);
+  const [patientModal, setPatientModal] = useState(false);
   const [researchQuery, setResearchQuery] = useState(
     "What helps with evening agitation in memory support?",
   );
@@ -33,11 +32,10 @@ export default function FamilyPage() {
     const response = await fetch("/api/state").catch(() => null);
     if (!response?.ok) return;
     const data = (await response.json().catch(() => null)) as AppState | null;
-    if (data) {
-      setState(data);
-      setDraftProfile(data.profile);
-      setDraftPolicies(data.memoryPolicies);
-    }
+    if (!data) return;
+    setState(data);
+    setDraftProfile(data.profile);
+    setDraftPolicies(data.memoryPolicies);
   }
 
   async function saveState(nextProfile = draftProfile, nextPolicies = draftPolicies) {
@@ -116,10 +114,19 @@ export default function FamilyPage() {
     [events],
   );
   const latest = events[0];
+  const patientView: PatientViewModel | null = state
+    ? buildPatientView(
+        {
+          ...state,
+          currentMode: state.currentMode,
+        },
+        state.patientPrompt,
+      )
+    : null;
 
   const statusText =
     state?.currentMode === "panic"
-      ? "Panic happening now"
+      ? "Lockdown is active now"
       : state?.currentTrack?.status === "playing"
         ? "Music is playing now"
         : state?.currentMode === "talk"
@@ -135,9 +142,9 @@ export default function FamilyPage() {
           <p>Everything editable lives here.</p>
         </div>
         <div className="button-row">
-          <Link href="/patient" className="secondary-button">
-            Open patient
-          </Link>
+          <button className="secondary-button" type="button" onClick={() => setPatientModal(true)}>
+            View patient
+          </button>
           <button
             className="secondary-button"
             type="button"
@@ -162,9 +169,7 @@ export default function FamilyPage() {
               <span className="pill">{state?.currentMode ?? "home"}</span>
             </div>
             <p>
-              {latest
-                ? `${latest.description} at ${latest.timestamp}`
-                : "No events yet."}
+              {latest ? `${latest.description} at ${latest.timestamp}` : "No events yet."}
             </p>
             <div className="stats-grid">
               {[
@@ -195,7 +200,6 @@ export default function FamilyPage() {
                 {expandedLog ? "Collapse" : "Expand"}
               </button>
             </div>
-
             <div className={expandedLog ? "activity-list expanded" : "activity-list collapsed"}>
               {events.map((event) => (
                 <article
@@ -247,7 +251,9 @@ export default function FamilyPage() {
               {profile?.key_memories.map((memory) => (
                 <article key={memory.id} className="memory-editor">
                   <div className="memory-hero">
-                    <div className="memory-photo">{memory.photoHint}</div>
+                    <div className="memory-photo">
+                      <img src={createMemoryImage(memory)} alt={memory.title} />
+                    </div>
                     <div>
                       <strong>{memory.title}</strong>
                       <p>{memory.relationship}</p>
@@ -260,15 +266,12 @@ export default function FamilyPage() {
                       value={memory.story}
                       onChange={(event) => {
                         if (!draftProfile) return;
-                        const next = {
+                        setDraftProfile({
                           ...draftProfile,
                           key_memories: draftProfile.key_memories.map((item) =>
-                            item.id === memory.id
-                              ? { ...item, story: event.target.value }
-                              : item,
+                            item.id === memory.id ? { ...item, story: event.target.value } : item,
                           ),
-                        };
-                        setDraftProfile(next);
+                        });
                       }}
                     />
                   </label>
@@ -305,13 +308,12 @@ export default function FamilyPage() {
                     value={task.time}
                     onChange={(event) => {
                       if (!draftProfile) return;
-                      const next = {
+                      setDraftProfile({
                         ...draftProfile,
                         daily_tasks: draftProfile.daily_tasks.map((item, itemIndex) =>
                           itemIndex === index ? { ...item, time: event.target.value } : item,
                         ),
-                      };
-                      setDraftProfile(next);
+                      });
                     }}
                   />
                   <input
@@ -319,15 +321,12 @@ export default function FamilyPage() {
                     value={task.description}
                     onChange={(event) => {
                       if (!draftProfile) return;
-                      const next = {
+                      setDraftProfile({
                         ...draftProfile,
                         daily_tasks: draftProfile.daily_tasks.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, description: event.target.value }
-                            : item,
+                          itemIndex === index ? { ...item, description: event.target.value } : item,
                         ),
-                      };
-                      setDraftProfile(next);
+                      });
                     }}
                   />
                 </article>
@@ -385,7 +384,7 @@ export default function FamilyPage() {
           </section>
         </section>
 
-        <section className="family-column family-wide">
+        <section className="family-column">
           <section className="surface-card family-card">
             <p className="card-kicker">Research</p>
             <h2>Caregiver guidance here</h2>
@@ -416,8 +415,115 @@ export default function FamilyPage() {
         </section>
       </section>
 
+      {patientModal ? (
+        <div className="modal-backdrop">
+          <section className="surface-card patient-preview-modal">
+            <div className="header-row">
+              <div>
+                <p className="card-kicker">Patient view</p>
+                <h2>{patientView?.heading ?? "Hello, Margaret"}</h2>
+              </div>
+              <button className="secondary-button" type="button" onClick={() => setPatientModal(false)}>
+                Close
+              </button>
+            </div>
+
+            <div className="patient-preview-grid">
+              {patientView?.cards.map((card) => {
+                if (card.kind === "greeting" || card.kind === "reassurance") {
+                  return (
+                    <article key={card.id} className="patient-preview-card wide">
+                      <p className="card-kicker">{card.kind}</p>
+                      <h3>{card.title}</h3>
+                      {"body" in card ? <p>{card.body}</p> : <p>{card.subtitle}</p>}
+                    </article>
+                  );
+                }
+                if (card.kind === "memory") {
+                  return (
+                    <article key={card.id} className="patient-preview-card memory">
+                      <img src={card.imageUrl || createMemoryImage({
+                        id: card.id,
+                        title: card.title,
+                        story: card.story,
+                        photoHint: card.photoHint,
+                        relationship: card.relationship,
+                      })} alt={card.title} />
+                      <div>
+                        <p className="card-kicker">memory</p>
+                        <h3>{card.title}</h3>
+                        <p>{card.story}</p>
+                      </div>
+                    </article>
+                  );
+                }
+                if (card.kind === "tasks" || card.kind === "medication") {
+                  if (card.kind === "tasks") {
+                    return (
+                      <article key={card.id} className="patient-preview-card">
+                        <p className="card-kicker">tasks</p>
+                        <h3>{card.title}</h3>
+                        <div className="stack">
+                          {card.items.map((item) => (
+                            <div key={`${card.kind}-${item.time}-${item.description}`} className="mini-list-card">
+                              <strong>{item.time}</strong>
+                              <span>{item.description}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  }
+                  return (
+                    <article key={card.id} className="patient-preview-card">
+                      <p className="card-kicker">{card.kind}</p>
+                      <h3>{card.title}</h3>
+                      <div className="stack">
+                        {card.items.map((item) => (
+                          <div key={`${card.kind}-${item.time}-${item.name}`} className="mini-list-card">
+                            <strong>{item.time}</strong>
+                            <span>{item.name} {item.dose}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </article>
+                  );
+                }
+                if (card.kind === "talk") {
+                  return (
+                    <article key={card.id} className="patient-preview-card wide">
+                      <p className="card-kicker">talk</p>
+                      <h3>{card.title}</h3>
+                      <p>{card.body}</p>
+                    </article>
+                  );
+                }
+                if (card.kind === "panic") {
+                  return (
+                    <article key={card.id} className="patient-preview-card wide">
+                      <p className="card-kicker">lockdown</p>
+                      <h3>{card.title}</h3>
+                      <p>{card.body}</p>
+                    </article>
+                  );
+                }
+                if (card.kind === "music") {
+                  return (
+                    <article key={card.id} className="patient-preview-card wide">
+                      <p className="card-kicker">music</p>
+                      <h3>{card.title}</h3>
+                      <p>{card.memoryTouch}</p>
+                    </article>
+                  );
+                }
+                return null;
+              })}
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       <Footer />
     </main>
   );
 }
-
