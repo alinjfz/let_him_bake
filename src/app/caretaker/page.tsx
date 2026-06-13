@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MirrorRenderer, parseA2UISurface } from "@/a2ui/MirrorRenderer";
+import { CaretakerMemoryStudio } from "@/components/caretaker/CaretakerMemoryStudio";
 import "@/a2ui/theme.css";
 import type { AppState, MemoryPolicy } from "@/lib/app-state";
 import {
@@ -74,6 +75,11 @@ export default function CaretakerPage() {
   const [caretakerName, setCaretakerName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  const effectivePolicies = useMemo(
+    () => ({ ...buildPolicies(profile), ...policies }),
+    [profile, policies],
+  );
 
   const loadState = useCallback(async () => {
     const session = readSession();
@@ -331,7 +337,7 @@ export default function CaretakerPage() {
 
   async function finishOnboarding() {
     const synced = syncFirstName(profile);
-    const nextPolicies = buildPolicies(synced);
+    const nextPolicies = effectivePolicies;
     setPolicies(nextPolicies);
     await persist(synced, true, nextPolicies);
   }
@@ -369,7 +375,7 @@ export default function CaretakerPage() {
   );
 
   async function openPatientPreview() {
-    const saved = await persist(profile, false, buildPolicies(profile));
+    const saved = await persist(profile, false, effectivePolicies);
     if (!saved) return;
     setPreviewOpen(true);
     setPreviewPayload(null);
@@ -567,45 +573,17 @@ export default function CaretakerPage() {
             )}
 
             {step === "memories" && (
-              <div className="caretaker-stack">
-                <p className="caretaker-lead">Short stories work best. One warm moment at a time.</p>
-                {profile.key_memories.map((memory, index) => (
-                  <article key={memory.id} className="caretaker-item">
-                    <input
-                      className="caretaker-input"
-                      value={memory.title}
-                      placeholder="Memory title"
-                      onChange={(e) => updateMemory(index, { title: e.target.value })}
-                    />
-                    <textarea
-                      className="caretaker-textarea"
-                      value={memory.story}
-                      placeholder="A short story they can hold onto"
-                      onChange={(e) => updateMemory(index, { story: e.target.value })}
-                    />
-                    <div className="caretaker-row">
-                      <input
-                        className="caretaker-input"
-                        value={memory.relationship}
-                        placeholder="Relationship"
-                        onChange={(e) => updateMemory(index, { relationship: e.target.value })}
-                      />
-                      <input
-                        className="caretaker-input caretaker-input-short"
-                        value={memory.photoHint}
-                        placeholder="Emoji"
-                        onChange={(e) => updateMemory(index, { photoHint: e.target.value })}
-                      />
-                      <button className="caretaker-text-btn" type="button" onClick={() => removeMemory(index)}>
-                        Remove
-                      </button>
-                    </div>
-                  </article>
-                ))}
-                <button className="caretaker-secondary" type="button" onClick={addMemory}>
-                  Add a memory
-                </button>
-              </div>
+              <CaretakerMemoryStudio
+                profile={profile}
+                policies={effectivePolicies}
+                compact
+                onUpdateMemory={updateMemory}
+                onUpdatePolicy={(memoryId, policy) =>
+                  setPolicies((current) => ({ ...current, [memoryId]: policy }))
+                }
+                onAddMemory={addMemory}
+                onRemoveMemory={removeMemory}
+              />
             )}
 
             {step === "routine" && (
@@ -834,36 +812,16 @@ export default function CaretakerPage() {
 
         <section className="caretaker-card">
           {dashboardTab === "memories" && (
-            <div className="caretaker-stack">
-              {profile.key_memories.map((memory, index) => (
-                <article key={memory.id} className="caretaker-item">
-                  <strong>{memory.title || "Untitled memory"}</strong>
-                  <textarea
-                    className="caretaker-textarea"
-                    value={memory.story}
-                    onChange={(e) => updateMemory(index, { story: e.target.value })}
-                  />
-                  <select
-                    className="caretaker-input"
-                    value={policies[memory.id] ?? "show"}
-                    onChange={(e) =>
-                      setPolicies((current) => ({
-                        ...current,
-                        [memory.id]: e.target.value as MemoryPolicy,
-                      }))
-                    }
-                  >
-                    <option value="show">Show as written</option>
-                    <option value="soften">Soften language</option>
-                    <option value="redirect">Redirect gently</option>
-                    <option value="hide">Hide for now</option>
-                  </select>
-                </article>
-              ))}
-              <button className="caretaker-secondary" type="button" onClick={addMemory}>
-                Add memory
-              </button>
-            </div>
+            <CaretakerMemoryStudio
+              profile={profile}
+              policies={effectivePolicies}
+              onUpdateMemory={updateMemory}
+              onUpdatePolicy={(memoryId, policy) =>
+                setPolicies((current) => ({ ...current, [memoryId]: policy }))
+              }
+              onAddMemory={addMemory}
+              onRemoveMemory={removeMemory}
+            />
           )}
 
           {dashboardTab === "routine" && (
@@ -942,7 +900,7 @@ export default function CaretakerPage() {
               className="caretaker-primary"
               type="button"
               disabled={busy}
-              onClick={() => void persist(profile, false, buildPolicies(profile))}
+              onClick={() => void persist(profile, false, effectivePolicies)}
             >
               {busy ? "Saving..." : "Save changes"}
             </button>

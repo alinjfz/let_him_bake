@@ -10,6 +10,8 @@ import {
   DailyTaskRenderer,
   EvidenceCardRenderer,
   MemoryCardRenderer,
+  MemoryContextCardRenderer,
+  MemoryLibraryHeaderRenderer,
   MedicationReminderRenderer,
   MusicCardRenderer,
   PanicOptionsRenderer,
@@ -64,6 +66,10 @@ function renderComponent(
       return wrap(<MusicCardRenderer props={item.props} />, "a2ui-single-music");
     case "EvidenceCard":
       return wrap(<EvidenceCardRenderer props={item.props} />, "a2ui-single-evidence");
+    case "MemoryLibraryHeader":
+      return wrap(<MemoryLibraryHeaderRenderer props={item.props} />, "a2ui-single-library");
+    case "MemoryContextCard":
+      return wrap(<MemoryContextCardRenderer props={item.props} />, "a2ui-single-context");
     default:
       return null;
   }

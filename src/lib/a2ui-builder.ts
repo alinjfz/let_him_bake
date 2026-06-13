@@ -356,13 +356,13 @@ export function buildAskStep(
   };
 }
 
-export function buildTalkStep(profile: PatientProfile, body: string): PatientStep {
+export function buildTalkStep(profile: PatientProfile, body: string, title = "Answer"): PatientStep {
   return {
     component: {
       id: "talk",
       component: "MemoryCard",
       props: {
-        title: "For you",
+        title,
         story: body,
         photoHint: "💬",
         relationship: "companion",

@@ -1,11 +1,13 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import type {
   CalmingMessageProps,
   DailyTaskProps,
   EvidenceCardProps,
   MemoryCardProps,
+  MemoryContextCardProps,
+  MemoryLibraryHeaderProps,
   MedicationReminderProps,
   MusicCardProps,
   PanicOptionsProps,
@@ -30,19 +32,35 @@ export function PatientGreetingRenderer({ props }: { props: PatientGreetingProps
 }
 
 export function MemoryCardRenderer({ props }: { props: MemoryCardProps }) {
+  const canReveal = Boolean(props.imageUrl);
+  const [revealed, setRevealed] = useState(!canReveal);
+
   return (
-    <article className="a2ui-card a2ui-memory">
+    <article className={`a2ui-card a2ui-memory${revealed ? " revealed" : " photo-only"}`}>
       {props.imageUrl ? (
-        <div className="a2ui-memory-photo">
-          <img src={props.imageUrl} alt="" />
-        </div>
+        <button
+          type="button"
+          className="a2ui-memory-photo-btn"
+          onClick={() => setRevealed(true)}
+          aria-expanded={revealed}
+          aria-label={revealed ? props.title : `Show memory: ${props.title}`}
+        >
+          <div className="a2ui-memory-photo">
+            <img src={props.imageUrl} alt="" />
+          </div>
+          {!revealed ? <span className="a2ui-memory-tap">Tap the photo to read</span> : null}
+        </button>
       ) : (
         <span className="a2ui-emoji a2ui-memory-hint" aria-hidden="true">
           {props.photoHint}
         </span>
       )}
-      <h2>{props.title}</h2>
-      <p>{props.story}</p>
+      {revealed ? (
+        <>
+          <h2>{props.title}</h2>
+          <p>{props.story}</p>
+        </>
+      ) : null}
     </article>
   );
 }
@@ -153,6 +171,46 @@ export function EvidenceCardRenderer({ props }: { props: EvidenceCardProps }) {
           </a>
         ) : null}
       </footer>
+    </article>
+  );
+}
+
+export function MemoryLibraryHeaderRenderer({ props }: { props: MemoryLibraryHeaderProps }) {
+  return (
+    <article className="a2ui-card a2ui-memory-library">
+      <p className="a2ui-meta">Memory library</p>
+      <h2>{props.patientName}</h2>
+      <p className="a2ui-memory-library-stats">
+        {props.memoryCount} {props.memoryCount === 1 ? "memory" : "memories"}
+        {props.stage ? ` · ${props.stage} stage` : ""}
+        {props.locationArea ? ` · ${props.locationArea}` : ""}
+      </p>
+      {props.familySummary ? <p className="a2ui-memory-library-family">{props.familySummary}</p> : null}
+      <p className="a2ui-memory-library-guidance">{props.guidance}</p>
+    </article>
+  );
+}
+
+const POLICY_CLASS: Record<MemoryContextCardProps["policy"], string> = {
+  show: "policy-show",
+  soften: "policy-soften",
+  redirect: "policy-redirect",
+  hide: "policy-hide",
+};
+
+export function MemoryContextCardRenderer({ props }: { props: MemoryContextCardProps }) {
+  return (
+    <article className={`a2ui-card a2ui-memory-context ${POLICY_CLASS[props.policy]}`}>
+      <div className="a2ui-memory-context-head">
+        <span className="a2ui-meta">
+          Memory {props.memoryIndex + 1} of {props.memoryTotal}
+        </span>
+        <span className={`a2ui-policy-badge ${POLICY_CLASS[props.policy]}`}>{props.policyLabel}</span>
+      </div>
+      <p className="a2ui-memory-context-rel">{props.relationship || "Memory"}</p>
+      <p className="a2ui-memory-context-desc">{props.policyDescription}</p>
+      {props.contextNotes ? <p className="a2ui-memory-context-notes">{props.contextNotes}</p> : null}
+      <p className="a2ui-meta">{props.wordCount} words in story</p>
     </article>
   );
 }

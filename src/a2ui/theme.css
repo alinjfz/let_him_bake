@@ -62,6 +62,33 @@
   object-fit: cover;
 }
 
+.a2ui-memory-photo-btn {
+  display: grid;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: center;
+  font: inherit;
+}
+
+.a2ui-memory.photo-only .a2ui-memory-photo-btn {
+  cursor: pointer;
+}
+
+.a2ui-memory.revealed .a2ui-memory-photo-btn {
+  cursor: default;
+  pointer-events: none;
+}
+
+.a2ui-memory-tap {
+  color: var(--muted);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
 .a2ui-task-time,
 .a2ui-meta {
   color: var(--muted);
@@ -139,4 +166,86 @@
 .a2ui-evidence cite {
   font-style: normal;
   font-weight: 700;
+}
+
+.a2ui-memory-library {
+  text-align: left;
+}
+
+.a2ui-memory-library h2 {
+  font-size: clamp(1.35rem, 3vw, 1.75rem);
+}
+
+.a2ui-memory-library-stats,
+.a2ui-memory-library-family,
+.a2ui-memory-library-guidance {
+  margin: 0;
+  text-align: left;
+}
+
+.a2ui-memory-library-family {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+
+.a2ui-memory-library-guidance {
+  color: var(--primary);
+  font-weight: 650;
+  font-size: 0.92rem;
+}
+
+.a2ui-memory-context {
+  text-align: left;
+}
+
+.a2ui-memory-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.a2ui-memory-context-rel {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.a2ui-memory-context-desc,
+.a2ui-memory-context-notes {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.a2ui-policy-badge {
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.a2ui-policy-badge.policy-show {
+  background: rgba(90, 159, 122, 0.16);
+  color: #2d5a45;
+}
+
+.a2ui-policy-badge.policy-soften {
+  background: rgba(196, 132, 106, 0.16);
+  color: #5c4030;
+}
+
+.a2ui-policy-badge.policy-redirect {
+  background: rgba(123, 107, 181, 0.16);
+  color: #3d3560;
+}
+
+.a2ui-policy-badge.policy-hide {
+  background: rgba(120, 120, 120, 0.14);
+  color: #555;
 }

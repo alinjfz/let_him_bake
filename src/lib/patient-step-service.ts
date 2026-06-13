@@ -313,11 +313,21 @@ export async function resolvePatientStep(
           };
         }
       } else {
-        askStep = buildTalkStep(profile, answer.body);
+        askStep = buildTalkStep(profile, answer.body, answer.title ?? message);
       }
       askStep = {
         ...askStep,
         speakText: answer.speakText,
+        component:
+          askStep.component.component === "MemoryCard"
+            ? {
+                ...askStep.component,
+                props: {
+                  ...askStep.component.props,
+                  title: answer.title ?? message,
+                },
+              }
+            : askStep.component,
         theme: {
           accent: answer.theme.accent,
           surface: answer.theme.surface,
@@ -344,12 +354,22 @@ export async function resolvePatientStep(
     bounded = Math.min(bounded + 1, plan.length - 1);
   }
 
+  if (action === "back") {
+    bounded = Math.max(bounded - 1, 0);
+  }
+
   let current = plan[bounded];
   if (current.component.component !== "PanicOptions") {
     current = await enrichStep(current, profile, bounded, plan.length);
   }
 
-  if (action === "wake" || action === "morning" || action === "advance" || action === "moment") {
+  if (
+    action === "wake" ||
+    action === "morning" ||
+    action === "advance" ||
+    action === "back" ||
+    action === "moment"
+  ) {
     if (bounded === 0 && (action === "wake" || action === "morning")) {
       updateActivity({
         timestamp: nowTimestamp(),

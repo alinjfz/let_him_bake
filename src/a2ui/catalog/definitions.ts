@@ -75,6 +75,26 @@ export const EvidenceCardSchema = z.object({
   summary: z.string(),
 });
 
+export const MemoryLibraryHeaderSchema = z.object({
+  patientName: z.string(),
+  memoryCount: z.number(),
+  stage: z.string(),
+  locationArea: z.string().optional(),
+  familySummary: z.string().optional(),
+  guidance: z.string(),
+});
+
+export const MemoryContextCardSchema = z.object({
+  memoryIndex: z.number(),
+  memoryTotal: z.number(),
+  relationship: z.string(),
+  policy: z.enum(["show", "soften", "redirect", "hide"]),
+  policyLabel: z.string(),
+  policyDescription: z.string(),
+  contextNotes: z.string().optional(),
+  wordCount: z.number(),
+});
+
 export const A2UIComponentSchema = z.discriminatedUnion("component", [
   z.object({ id: z.string(), component: z.literal("PatientGreeting"), props: PatientGreetingSchema }),
   z.object({ id: z.string(), component: z.literal("MemoryCard"), props: MemoryCardSchema }),
@@ -88,6 +108,16 @@ export const A2UIComponentSchema = z.discriminatedUnion("component", [
   z.object({ id: z.string(), component: z.literal("CalmingMessage"), props: CalmingMessageSchema }),
   z.object({ id: z.string(), component: z.literal("MusicCard"), props: MusicCardSchema }),
   z.object({ id: z.string(), component: z.literal("EvidenceCard"), props: EvidenceCardSchema }),
+  z.object({
+    id: z.string(),
+    component: z.literal("MemoryLibraryHeader"),
+    props: MemoryLibraryHeaderSchema,
+  }),
+  z.object({
+    id: z.string(),
+    component: z.literal("MemoryContextCard"),
+    props: MemoryContextCardSchema,
+  }),
 ]);
 
 export const A2UISurfaceSchema = z.object({
@@ -105,6 +135,8 @@ export type PanicOptionsProps = z.infer<typeof PanicOptionsSchema>;
 export type CalmingMessageProps = z.infer<typeof CalmingMessageSchema>;
 export type MusicCardProps = z.infer<typeof MusicCardSchema>;
 export type EvidenceCardProps = z.infer<typeof EvidenceCardSchema>;
+export type MemoryLibraryHeaderProps = z.infer<typeof MemoryLibraryHeaderSchema>;
+export type MemoryContextCardProps = z.infer<typeof MemoryContextCardSchema>;
 
 export const COMPONENT_NAMES = [
   "PatientGreeting",
@@ -115,4 +147,6 @@ export const COMPONENT_NAMES = [
   "CalmingMessage",
   "MusicCard",
   "EvidenceCard",
+  "MemoryLibraryHeader",
+  "MemoryContextCard",
 ] as const;

@@ -378,8 +378,31 @@ export function fallbackAskMoment(
 
   let body = `I am here with you, ${firstName}.`;
 
-  if (/who am i|my name/.test(lower)) {
+  if (/where am i|where are we|what place|am i home/.test(lower)) {
+    const place = profile.location_area?.trim() || "home";
+    body = `You are safe at home in ${place}. This is your place.`;
+  } else if (/who am i|my name|what is my name/.test(lower)) {
     body = `You are ${firstName}. You are safe at home.`;
+  } else if (/what day|what date|what is today|today's date/.test(lower)) {
+    const greeting = buildMorningGreeting(profile);
+    body = `Today is ${greeting.dayOfWeek}, ${greeting.dateString}.`;
+  } else if (/what time|what's the time|time is it/.test(lower)) {
+    const time = new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: "Europe/London",
+    }).format(new Date());
+    body = `It is ${time}. You are doing fine.`;
+  } else if (/what should i do|what now|what next|what do i do/.test(lower)) {
+    const task = profile.daily_tasks[0];
+    body = task
+      ? `Next, ${task.description.toLowerCase()}. One step at a time.`
+      : `Take one slow breath. You are safe at home.`;
+  } else if (/family|who loves me|who cares/.test(lower)) {
+    const names = profile.family_members.slice(0, 2).map((m) => m.name);
+    body = names.length
+      ? `${names.join(" and ")} love you very much.`
+      : `People who care for you are close by.`;
   } else if (/music|song/.test(lower) && profile.music_preference) {
     body = `You love ${profile.music_preference}. That music can feel like home.`;
   } else {
@@ -393,7 +416,7 @@ export function fallbackAskMoment(
     step,
     total,
     kind: "talk",
-    title: "For you",
+    title: message.trim(),
     body,
     speakText: body,
     theme: THEMES.talk,

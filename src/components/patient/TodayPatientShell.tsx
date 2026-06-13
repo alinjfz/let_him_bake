@@ -1,70 +1,90 @@
 "use client";
 
+import { useAgent } from "@copilotkit/react-core/v2";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MirrorRenderer, parseA2UISurface } from "@/a2ui/MirrorRenderer";
 import type { A2UISurface } from "@/a2ui/catalog/definitions";
+import { patientStepBus } from "@/a2ui/patient-step-bus";
 import { PatientProviders } from "@/components/patient/PatientProviders";
 import "@/a2ui/theme.css";
 import "@/components/patient/patient.css";
-import { buildMemoryHighlight, type DailyTask, type PatientProfile } from "@/lib/echoes";
-import { createMemoryImage } from "@/lib/app-state";
+import type { DailyTask, Memory, PatientProfile } from "@/lib/echoes";
 import type { PatientStepPayload } from "@/lib/patient-step-service";
 import { clearSession, readSession, writePatientSession } from "@/lib/session";
 
 const ROLE_KEY = "echoes.role";
+
+const QUICK_ASKS = [
+  "Where am I?",
+  "Who am I?",
+  "Do I have family?",
+  "What should I do now?",
+] as const;
+
+type PatientFlowMode = "morning" | "panic" | "ask";
+
+type StepPayload = {
+  surface?: unknown;
+  step?: number;
+  total?: number;
+  showOkay?: boolean;
+  okayLabel?: string;
+  speakText?: string;
+  mode?: PatientFlowMode;
+  theme?: { accent: string; surface: string; text: string };
+};
 
 type DashboardAnchor = {
   label: string;
   value: string;
   detail: string;
   icon: string;
+  compact?: boolean;
 };
 
-function limitWords(text: string, maxWords: number) {
-  return text
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(" ");
+type SpeechRecognitionResultLike = { 0: { transcript: string } };
+type SpeechRecognitionEventLike = { results: ArrayLike<SpeechRecognitionResultLike> };
+type SpeechRecognitionLike = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+};
+
+function getSpeechRecognition() {
+  if (typeof window === "undefined") return null;
+  const ctor =
+    (window as Window & { webkitSpeechRecognition?: new () => SpeechRecognitionLike })
+      .webkitSpeechRecognition ??
+    (window as Window & { SpeechRecognition?: new () => SpeechRecognitionLike }).SpeechRecognition;
+  return ctor ? new ctor() : null;
 }
 
 function londonNow() {
   const now = new Date();
-  const day = new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    timeZone: "Europe/London",
-  }).format(now);
-  const date = new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "long",
-    timeZone: "Europe/London",
-  }).format(now);
-  const time = new Intl.DateTimeFormat("en-GB", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "Europe/London",
-  }).format(now);
-  const hour = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      hour: "numeric",
-      hour12: false,
-      timeZone: "Europe/London",
-    }).format(now),
-  );
-  const minute = Number(
-    new Intl.DateTimeFormat("en-GB", {
-      minute: "2-digit",
-      timeZone: "Europe/London",
-    }).format(now),
-  );
   return {
-    day,
-    date,
-    time,
-    minutes: Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : now.getHours() * 60 + now.getMinutes(),
+    day: new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Europe/London" }).format(now),
+    date: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", timeZone: "Europe/London" }).format(now),
+    time: new Intl.DateTimeFormat("en-GB", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZone: "Europe/London",
+    }).format(now),
+    minutes: (() => {
+      const hour = Number(
+        new Intl.DateTimeFormat("en-GB", { hour: "numeric", hour12: false, timeZone: "Europe/London" }).format(now),
+      );
+      const minute = Number(
+        new Intl.DateTimeFormat("en-GB", { minute: "2-digit", timeZone: "Europe/London" }).format(now),
+      );
+      return Number.isFinite(hour) && Number.isFinite(minute) ? hour * 60 + minute : now.getHours() * 60 + now.getMinutes();
+    })(),
   };
 }
 
@@ -80,80 +100,82 @@ function parseClockMinutes(value: string) {
   return hour * 60 + minute;
 }
 
-function taskClock(task: DailyTask) {
-  return task.time.replace(/\s+/g, " ").trim();
-}
-
-function taskSummary(task: DailyTask) {
-  return limitWords(task.description, 5);
-}
-
-function taskSearchText(task: DailyTask) {
-  return `${task.time} ${task.description}`.toLowerCase();
-}
-
-function chooseInitialTaskIndex(tasks: DailyTask[]) {
-  if (!tasks.length) return 0;
-  const now = londonNow();
-
-  let bestIndex = 0;
-  let bestDelta = Number.POSITIVE_INFINITY;
-
-  tasks.forEach((task, index) => {
-    const minutes = parseClockMinutes(task.time);
-    if (minutes === null) return;
-    const delta = minutes >= now.minutes ? minutes - now.minutes : 24 * 60 - now.minutes + minutes;
-    if (delta < bestDelta) {
-      bestDelta = delta;
-      bestIndex = index;
-    }
-  });
-
-  return bestIndex;
-}
-
 function findTask(tasks: DailyTask[], patterns: RegExp[]) {
-  return tasks.find((task) => patterns.some((pattern) => pattern.test(taskSearchText(task))));
+  return tasks.find((task) =>
+    patterns.some((pattern) => pattern.test(`${task.time} ${task.description}`.toLowerCase())),
+  );
 }
 
-function pickMedication(profile: PatientProfile) {
+function parseMedMinutes(value: string) {
+  return parseClockMinutes(value) ?? parseTimeOfDayMinutes(value);
+}
+
+function parseTimeOfDayMinutes(value: string) {
+  const lower = value.toLowerCase();
+  if (/morning|breakfast/.test(lower)) return 8 * 60;
+  if (/noon|midday|lunch/.test(lower)) return 12 * 60;
+  if (/afternoon/.test(lower)) return 15 * 60;
+  if (/evening|night|bedtime/.test(lower)) return 18 * 60;
+  return null;
+}
+
+function pickLatestMedication(profile: PatientProfile) {
+  if (!profile.medications.length) return null;
+
   const now = londonNow();
-  const morning = profile.medications.find((med) => /morning/i.test(med.time));
-  const evening = profile.medications.find((med) => /evening/i.test(med.time));
-  if (now.minutes < 14 * 60) return morning ?? profile.medications[0] ?? null;
-  return evening ?? profile.medications[profile.medications.length - 1] ?? null;
+  const ranked = profile.medications
+    .map((med, index) => {
+      const minutes = parseMedMinutes(med.time);
+      return minutes === null ? null : { med, minutes, index };
+    })
+    .filter((entry): entry is { med: (typeof profile.medications)[number]; minutes: number; index: number } =>
+      Boolean(entry),
+    )
+    .sort((a, b) => a.minutes - b.minutes);
+
+  if (!ranked.length) return profile.medications[profile.medications.length - 1] ?? null;
+
+  const upcoming = ranked.find((entry) => entry.minutes >= now.minutes);
+  return (upcoming ?? ranked[ranked.length - 1]).med;
 }
 
 function buildAnchors(profile: PatientProfile): DashboardAnchor[] {
   const call = findTask(profile.daily_tasks, [/\bcall\b/i, /\bphone\b/i, /\btalk\b/i, /\bvideo\b/i]);
-  const walk = findTask(profile.daily_tasks, [/\bwalk\b/i, /\bgarden\b/i, /\bstroll\b/i, /\bout\b/i]);
-  const medication = pickMedication(profile);
-  const callValue = call
-    ? taskSummary(call)
-    : profile.family_members[0]?.name
-      ? `Call ${profile.family_members[0].name}`
-      : "Family";
+  const medication = pickLatestMedication(profile);
 
   return [
     {
       label: "Meds",
-      value: medication ? `${medication.name} ${medication.dose}` : "None listed",
+      value: medication ? medication.name : "None listed",
       detail: medication ? medication.time : "Today",
       icon: "💊",
     },
     {
       label: "Call",
-      value: callValue,
-      detail: call ? call.time : "Today",
+      value: call?.time ?? "Today",
+      detail: "",
       icon: "📞",
-    },
-    {
-      label: "Walk",
-      value: walk ? taskSummary(walk) : "Fresh air",
-      detail: walk ? walk.time : "Today",
-      icon: "🚶",
+      compact: true,
     },
   ];
+}
+
+function memoryPreview(memory: Memory) {
+  if (memory.photoPath) return memory.photoPath;
+  const seed = memory.id.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  const hue = seed % 360;
+  const title = memory.title.replace(/'/g, "");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400" role="img" aria-label="${title}">
+    <defs>
+      <linearGradient id="g" x1="0%" x2="100%" y1="0%" y2="100%">
+        <stop offset="0%" stop-color="hsl(${hue} 70% 88%)"/>
+        <stop offset="100%" stop-color="hsl(${(hue + 40) % 360} 70% 78%)"/>
+      </linearGradient>
+    </defs>
+    <rect width="400" height="400" rx="32" fill="url(#g)" />
+    <text x="32" y="180" font-size="72" font-family="Arial, sans-serif">${memory.photoHint}</text>
+  </svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 async function fetchDashboardProfile(accessCode: string) {
@@ -163,17 +185,17 @@ async function fetchDashboardProfile(accessCode: string) {
   return data?.profile ?? null;
 }
 
-async function fetchPatientStep(accessCode: string, payload: Record<string, string | number>) {
+async function fetchStepFallback(
+  accessCode: string,
+  payload: Record<string, string | number>,
+): Promise<StepPayload> {
   const response = await fetch("/api/patient-a2ui", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accessCode, ...payload }),
   });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error ?? "request failed");
-  }
-  return (await response.json()) as PatientStepPayload;
+  if (!response.ok) throw new Error("failed");
+  return (await response.json()) as StepPayload;
 }
 
 export function TodayPatientShell() {
@@ -186,14 +208,27 @@ export function TodayPatientShell() {
 
 function PatientDashboard() {
   const router = useRouter();
+  const { agent } = useAgent({ agentId: "patient_agent" });
   const spokeRef = useRef("");
-  const dashboardSeededRef = useRef(false);
-  const clockTimerRef = useRef<number | null>(null);
+  const wakeRef = useRef(false);
+  const morningStepRef = useRef(0);
   const helpMusicTimerRef = useRef<number | null>(null);
 
   const [profile, setProfile] = useState<PatientProfile | null>(null);
-  const [taskIndex, setTaskIndex] = useState(0);
+  const [surface, setSurface] = useState<A2UISurface | null>(null);
+  const [step, setStep] = useState(0);
+  const [total, setTotal] = useState(1);
+  const [cardTheme, setCardTheme] = useState<
+    { accent: string; surface: string; text: string } | undefined
+  >();
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [askText, setAskText] = useState("");
+  const [askSurface, setAskSurface] = useState<A2UISurface | null>(null);
+  const [askTheme, setAskTheme] = useState<{ accent: string; surface: string; text: string } | undefined>();
+  const [askLoading, setAskLoading] = useState(false);
+  const [lastAskQuestion, setLastAskQuestion] = useState("");
+  const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [linked, setLinked] = useState(false);
   const [accessCode, setAccessCode] = useState("");
@@ -211,12 +246,31 @@ function PatientDashboard() {
   const [helpShowOkay, setHelpShowOkay] = useState(false);
   const [helpOkayLabel, setHelpOkayLabel] = useState("Okay");
   const [helpTheme, setHelpTheme] = useState<{ accent: string; surface: string; text: string } | undefined>();
+  const [agentReady, setAgentReady] = useState(false);
   const [clockTick, setClockTick] = useState(0);
 
   const clock = useMemo(() => londonNow(), [clockTick]);
+  const anchors = useMemo(() => (profile ? buildAnchors(profile) : []), [profile, clockTick]);
+  const selectedMemory = useMemo(
+    () => profile?.key_memories.find((memory) => memory.id === selectedMemoryId) ?? null,
+    [profile, selectedMemoryId],
+  );
+  const helpIsMusic = helpSurface?.components[0]?.component === "MusicCard";
+
+  useEffect(() => setAgentReady(Boolean(agent)), [agent]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick((v) => v + 1), 30_000);
+    return () => {
+      window.clearInterval(timer);
+      if (helpMusicTimerRef.current !== null) window.clearTimeout(helpMusicTimerRef.current);
+    };
+  }, []);
 
   const speak = useCallback((text: string) => {
     if (typeof window === "undefined" || !window.speechSynthesis || !text) return;
+    if (spokeRef.current === text) return;
+    spokeRef.current = text;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 0.9;
@@ -224,45 +278,100 @@ function PatientDashboard() {
     window.speechSynthesis.speak(utterance);
   }, []);
 
-  const currentTask = useMemo(() => {
-    if (!profile?.daily_tasks.length) {
-      return {
-        time: "Now",
-        description: "Take one slow breath.",
-        icon: "🌿",
-      };
-    }
-    return profile.daily_tasks[Math.min(taskIndex, profile.daily_tasks.length - 1)] ?? profile.daily_tasks[0];
-  }, [profile, taskIndex]);
+  const applyStep = useCallback(
+    (data: StepPayload) => {
+      if (data.mode === "ask") {
+        setAskSurface(parseA2UISurface(data.surface));
+        setAskTheme(data.theme);
+        if (data.speakText) speak(data.speakText);
+        return;
+      }
 
-  const memory = useMemo(() => (profile ? buildMemoryHighlight(profile) : null), [profile]);
-  const upcomingTasks = useMemo(() => profile?.daily_tasks.slice(taskIndex, taskIndex + 3) ?? [], [profile, taskIndex]);
-  const memories = useMemo(() => profile?.key_memories.slice(0, 3) ?? [], [profile]);
-
-  const anchors = useMemo(() => {
-    if (!profile) return [];
-    return buildAnchors(profile);
-  }, [profile, clockTick]);
-
-  const helpIsMusic = helpSurface?.components[0]?.component === "MusicCard";
+      setSurface(parseA2UISurface(data.surface));
+      setStep(data.step ?? 0);
+      setTotal(data.total ?? 1);
+      setCardTheme(data.theme);
+      if (data.mode === "morning") morningStepRef.current = data.step ?? 0;
+      if (data.speakText) speak(data.speakText);
+    },
+    [speak],
+  );
 
   useEffect(() => {
-    clockTimerRef.current = window.setInterval(() => setClockTick((value) => value + 1), 30_000);
-    return () => {
-      if (clockTimerRef.current !== null) {
-        window.clearInterval(clockTimerRef.current);
+    return patientStepBus.subscribe((payload: PatientStepPayload) => applyStep(payload));
+  }, [applyStep]);
+
+  const loadStep = useCallback(
+    async (payload: Record<string, string | number>) => {
+      const code = readSession().patientCode || accessCode;
+      if (!code) return;
+      const isAsk = payload.action === "ask";
+      if (isAsk) {
+        setAskLoading(true);
+      } else {
+        setBusy(true);
       }
-      if (helpMusicTimerRef.current !== null) {
-        window.clearTimeout(helpMusicTimerRef.current);
+      setError("");
+      patientStepBus.reset();
+
+      const action = { accessCode: code, ...payload };
+      let captured = false;
+
+      try {
+        if (agent) {
+          let resolved = false;
+          const unsub = agent.subscribe({
+            onEvent({ event }) {
+              const typed = event as { type?: string; name?: string; value?: StepPayload };
+              if (typed.type !== "CUSTOM" && typed.type !== "Custom") return;
+              if (typed.name === "echoes-patient-step" && typed.value) {
+                applyStep(typed.value);
+                captured = true;
+                resolved = true;
+              }
+            },
+          });
+
+          agent.addMessage({
+            id: crypto.randomUUID(),
+            role: "user",
+            content: JSON.stringify(action),
+          });
+          await agent.runAgent({ forwardedProps: { patientAction: action } });
+          unsub.unsubscribe();
+
+          if (!resolved) {
+            const fromBus = patientStepBus.latest();
+            if (fromBus) {
+              applyStep(fromBus);
+              captured = true;
+            }
+          }
+        }
+
+        if (!captured) {
+          applyStep(await fetchStepFallback(code, payload));
+        }
+      } catch {
+        try {
+          applyStep(await fetchStepFallback(code, payload));
+        } catch {
+          setError("Something went quiet. Try again.");
+        }
+      } finally {
+        if (isAsk) {
+          setAskLoading(false);
+        } else {
+          setBusy(false);
+        }
       }
-    };
-  }, []);
+    },
+    [accessCode, agent, applyStep],
+  );
 
   useEffect(() => {
     const stored = window.localStorage.getItem(ROLE_KEY);
-    if (stored === "family") {
-      window.localStorage.setItem(ROLE_KEY, "caretaker");
-    }
+    if (stored === "family") window.localStorage.setItem(ROLE_KEY, "caretaker");
     const role = stored === "family" ? "caretaker" : stored;
     if (role && role !== "patient") {
       router.push(role === "caretaker" ? "/caretaker" : "/");
@@ -277,20 +386,17 @@ function PatientDashboard() {
 
   useEffect(() => {
     if (!linked || !accessCode) return;
-    let active = true;
-    void (async () => {
-      const nextProfile = await fetchDashboardProfile(accessCode);
-      if (!active || !nextProfile) return;
-      setProfile(nextProfile);
-      if (!dashboardSeededRef.current) {
-        dashboardSeededRef.current = true;
-        setTaskIndex(chooseInitialTaskIndex(nextProfile.daily_tasks));
-      }
-    })();
-    return () => {
-      active = false;
-    };
+    void fetchDashboardProfile(accessCode).then((next) => {
+      if (next) setProfile(next);
+    });
   }, [linked, accessCode]);
+
+  useEffect(() => {
+    if (!linked || !accessCode || !agentReady || wakeRef.current) return;
+    wakeRef.current = true;
+    spokeRef.current = "";
+    void loadStep({ action: "wake", step: 0 });
+  }, [linked, accessCode, agentReady, loadStep]);
 
   async function linkPatient() {
     const code = codeInput.trim().toUpperCase();
@@ -299,7 +405,6 @@ function PatientDashboard() {
       return;
     }
     setBusy(true);
-    setError("");
     const profileData = await fetchDashboardProfile(code);
     setBusy(false);
     if (!profileData) {
@@ -307,29 +412,66 @@ function PatientDashboard() {
       return;
     }
     writePatientSession(code);
-    dashboardSeededRef.current = false;
+    wakeRef.current = false;
     setAccessCode(code);
     setProfile(profileData);
-    setTaskIndex(chooseInitialTaskIndex(profileData.daily_tasks));
     setLinked(true);
   }
 
-  function handleBack() {
-    setTaskIndex((value) => Math.max(0, value - 1));
+  function handlePrev() {
+    if (busy || step <= 0) return;
+    spokeRef.current = "";
+    void loadStep({ action: "back", step });
   }
 
   function handleNext() {
-    if (!profile?.daily_tasks.length) return;
-    setTaskIndex((value) => Math.min(profile.daily_tasks.length - 1, value + 1));
+    if (busy || step >= total - 1) return;
+    spokeRef.current = "";
+    void loadStep({ action: "advance", step });
+  }
+
+  function dismissAsk() {
+    setAskSurface(null);
+    setAskTheme(undefined);
+    spokeRef.current = "";
+  }
+
+  function submitAsk(message: string) {
+    const trimmed = message.trim();
+    if (!trimmed || busy || askLoading) return;
+    setAskText("");
+    setLastAskQuestion(trimmed);
+    spokeRef.current = "";
+    void loadStep({ action: "ask", message: trimmed, step: morningStepRef.current });
+  }
+
+  function startListening() {
+    const recognition = getSpeechRecognition();
+    if (!recognition) {
+      setError("Voice is not available on this device.");
+      return;
+    }
+    window.speechSynthesis?.cancel();
+    setListening(true);
+    recognition.lang = "en-GB";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (transcript) submitAsk(transcript);
+    };
+    recognition.onerror = () => setError("I did not catch that. Try again.");
+    recognition.onend = () => setListening(false);
+    recognition.start();
+  }
+
+  async function fetchHelpStep(payload: Record<string, string | number>) {
+    const code = readSession().patientCode || accessCode;
+    if (!code) throw new Error("missing code");
+    return fetchStepFallback(code, payload);
   }
 
   async function openHelp() {
-    const code = readSession().patientCode || accessCode;
-    if (!code) {
-      setError("Missing home code.");
-      return;
-    }
-
     if (helpMusicTimerRef.current !== null) {
       window.clearTimeout(helpMusicTimerRef.current);
       helpMusicTimerRef.current = null;
@@ -337,29 +479,15 @@ function PatientDashboard() {
     setHelpOpen(true);
     setHelpBusy(true);
     setHelpError("");
-
     try {
-      const data = await fetchPatientStep(code, {
-        action: "panic",
-        step: 0,
-        message: "__PANIC__",
-      });
+      const data = await fetchHelpStep({ action: "panic", step: 0, message: "__PANIC__" });
       setHelpSurface(parseA2UISurface(data.surface));
       setHelpStep(data.step ?? 0);
       setHelpTotal(data.total ?? 0);
       setHelpShowOkay(Boolean(data.showOkay));
       setHelpOkayLabel(data.okayLabel ?? "Okay");
       setHelpTheme(data.theme);
-      if (data.speakText && spokeRef.current !== data.speakText) {
-        spokeRef.current = data.speakText;
-        speak(data.speakText);
-      }
-      if (data.step === 0) {
-        helpMusicTimerRef.current = window.setTimeout(() => {
-          helpMusicTimerRef.current = null;
-          void requestMusic();
-        }, 900);
-      }
+      if (data.speakText) speak(data.speakText);
     } catch {
       setHelpError("Help is quiet right now.");
     } finally {
@@ -368,27 +496,17 @@ function PatientDashboard() {
   }
 
   async function advanceHelp(nextStep: number) {
-    const code = readSession().patientCode || accessCode;
-    if (!code) return;
-
     setHelpBusy(true);
     setHelpError("");
-
     try {
-      const data = await fetchPatientStep(code, {
-        action: "panic",
-        step: nextStep,
-      });
+      const data = await fetchHelpStep({ action: "panic", step: nextStep });
       setHelpSurface(parseA2UISurface(data.surface));
       setHelpStep(data.step ?? nextStep);
       setHelpTotal(data.total ?? 0);
       setHelpShowOkay(Boolean(data.showOkay));
       setHelpOkayLabel(data.okayLabel ?? "Okay");
       setHelpTheme(data.theme);
-      if (data.speakText && spokeRef.current !== data.speakText) {
-        spokeRef.current = data.speakText;
-        speak(data.speakText);
-      }
+      if (data.speakText) speak(data.speakText);
     } catch {
       setHelpError("Help is quiet right now.");
     } finally {
@@ -397,32 +515,17 @@ function PatientDashboard() {
   }
 
   async function requestMusic() {
-    const code = readSession().patientCode || accessCode;
-    if (!code) return;
-
-    if (helpMusicTimerRef.current !== null) {
-      window.clearTimeout(helpMusicTimerRef.current);
-      helpMusicTimerRef.current = null;
-    }
     setHelpBusy(true);
     setHelpError("");
-
     try {
-      const data = await fetchPatientStep(code, {
-        action: "music",
-        step: 0,
-        message: "__MUSIC__",
-      });
+      const data = await fetchHelpStep({ action: "music", step: 0, message: "__MUSIC__" });
       setHelpSurface(parseA2UISurface(data.surface));
       setHelpStep(data.step ?? 0);
       setHelpTotal(data.total ?? 0);
       setHelpShowOkay(Boolean(data.showOkay));
       setHelpOkayLabel(data.okayLabel ?? "Okay");
       setHelpTheme(data.theme);
-      if (data.speakText && spokeRef.current !== data.speakText) {
-        spokeRef.current = data.speakText;
-        speak(data.speakText);
-      }
+      if (data.speakText) speak(data.speakText);
     } catch {
       setHelpError("Music is quiet right now.");
     } finally {
@@ -493,65 +596,72 @@ function PatientDashboard() {
           </div>
         </header>
 
-        <article className="patient-dashboard-card" aria-live="polite">
-          <div className="patient-dashboard-card-head">
-            <span className="patient-dashboard-label">Now</span>
-            <span className="patient-dashboard-step">
-              {profile?.daily_tasks.length
-                ? `Step ${Math.min(taskIndex, profile.daily_tasks.length - 1) + 1} of ${profile.daily_tasks.length}`
-                : "One step"}
-            </span>
+        <div className="patient-a2ui-stage" aria-live="polite">
+          <div className="patient-a2ui-nav">
+            <button
+              className="patient-a2ui-nav-btn"
+              type="button"
+              disabled={busy || step <= 0}
+              onClick={handlePrev}
+              aria-label="Previous card"
+            >
+              Prev
+            </button>
+            <div className="patient-a2ui-card-slot">
+              {busy && !surface ? <p className="patient-dashboard-note">One moment...</p> : null}
+              <MirrorRenderer
+                key={`morning-${step}`}
+                surface={surface}
+                single
+                step={step}
+                total={total}
+                theme={cardTheme}
+                onPanicSelect={(id) => {
+                  if (id === "music") void loadStep({ action: "music", message: "__MUSIC__", step: 0 });
+                }}
+              />
+            </div>
+            <button
+              className="patient-a2ui-nav-btn"
+              type="button"
+              disabled={busy || step >= total - 1}
+              onClick={handleNext}
+              aria-label="Next card"
+            >
+              Next
+            </button>
           </div>
-          <div className="patient-dashboard-task-icon" aria-hidden="true">
-            {currentTask.icon}
-          </div>
-          <h2>{taskSummary(currentTask) || taskClock(currentTask)}</h2>
-          <p className="patient-dashboard-task-copy">{taskClock(currentTask)}</p>
-          <p className="patient-dashboard-task-note">Just one thing.</p>
-        </article>
+        </div>
 
-        {memory ? (
-          <article className="patient-dashboard-memory">
-            <div className="patient-dashboard-memory-art" aria-hidden="true">
-              <img src={createMemoryImage(memory)} alt="" />
+        {profile?.key_memories.length ? (
+          <section className="patient-memory-gallery" aria-label="Memory photos">
+            <h2 className="patient-memory-gallery-title">Memories</h2>
+            <div className="patient-memory-gallery-grid">
+              {profile.key_memories.map((memory) => {
+                const preview = memoryPreview(memory);
+                const active = selectedMemoryId === memory.id;
+                return (
+                  <button
+                    key={memory.id}
+                    type="button"
+                    className={`patient-memory-gallery-item${active ? " active" : ""}`}
+                    onClick={() => setSelectedMemoryId(active ? null : memory.id)}
+                    aria-expanded={active}
+                    aria-label={`Memory: ${memory.title}`}
+                  >
+                    {preview ? <img src={preview} alt="" /> : null}
+                  </button>
+                );
+              })}
             </div>
-            <div className="patient-dashboard-memory-copy">
-              <p className="patient-dashboard-label">Memory</p>
-              <h2>{memory.title}</h2>
-              <p>{limitWords(memory.story, 10)}</p>
-              <small>{memory.relationship}</small>
-            </div>
-          </article>
+            {selectedMemory ? (
+              <article className="patient-memory-gallery-story">
+                <h3>{selectedMemory.title}</h3>
+                <p>{selectedMemory.story}</p>
+              </article>
+            ) : null}
+          </section>
         ) : null}
-
-        <section className="patient-dashboard-feed" aria-label="Cards">
-          <div className="patient-dashboard-feed-head">
-            <p className="patient-dashboard-label">Cards</p>
-            <span>{upcomingTasks.length} steps · {memories.length} memories</span>
-          </div>
-          <div className="patient-dashboard-feed-grid">
-            {upcomingTasks.map((task, index) => (
-              <article key={`${task.time}-${task.description}`} className="patient-dashboard-mini-card patient-dashboard-step-card">
-                <span className="patient-dashboard-mini-kicker">Step {taskIndex + index + 1}</span>
-                <span className="patient-dashboard-mini-icon" aria-hidden="true">
-                  {task.icon}
-                </span>
-                <strong>{taskSummary(task)}</strong>
-                <small>{taskClock(task)}</small>
-              </article>
-            ))}
-            {memories.map((item) => (
-              <article key={item.id} className="patient-dashboard-mini-card patient-dashboard-memory-card">
-                <span className="patient-dashboard-mini-kicker">Memory</span>
-                <span className="patient-dashboard-mini-icon" aria-hidden="true">
-                  ✦
-                </span>
-                <strong>{item.title}</strong>
-                <small>{limitWords(item.story, 8)}</small>
-              </article>
-            ))}
-          </div>
-        </section>
 
         <section className="patient-dashboard-strip" aria-label="Today at a glance">
           {anchors.map((anchor) => (
@@ -559,28 +669,82 @@ function PatientDashboard() {
               <span className="patient-dashboard-chip-icon" aria-hidden="true">
                 {anchor.icon}
               </span>
-              <span className="patient-dashboard-chip-label">{anchor.label}</span>
-              <strong>{anchor.value}</strong>
-              <small>{anchor.detail}</small>
+              {anchor.compact ? (
+                <strong className="patient-dashboard-chip-compact">{anchor.value}</strong>
+              ) : (
+                <>
+                  <span className="patient-dashboard-chip-label">{anchor.label}</span>
+                  <strong>{anchor.value}</strong>
+                  {anchor.detail ? <small>{anchor.detail}</small> : null}
+                </>
+              )}
             </article>
           ))}
         </section>
 
+        <section className="patient-ask-panel" aria-label="Ask me anything">
+          <h2 className="patient-ask-title">Ask me anything</h2>
+          <form
+            className="patient-ask-form"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitAsk(askText);
+            }}
+          >
+            <input
+              className="patient-ask-input"
+              value={askText}
+              onChange={(e) => setAskText(e.target.value)}
+              placeholder="Where am I? Who am I?"
+              disabled={busy || askLoading || listening}
+              aria-label="Your question"
+            />
+            <button
+              className="patient-ask-submit"
+              type="submit"
+              disabled={busy || askLoading || listening || !askText.trim()}
+            >
+              Ask
+            </button>
+            <button
+              className={`patient-ask-voice${listening ? " listening" : ""}`}
+              type="button"
+              disabled={busy || askLoading || listening}
+              onClick={startListening}
+              aria-label="Ask with your voice"
+            >
+              {listening ? "…" : "🎤"}
+            </button>
+          </form>
+          <div className="patient-ask-chips">
+            {QUICK_ASKS.map((question) => (
+              <button
+                key={question}
+                className="patient-ask-chip"
+                type="button"
+                disabled={busy || askLoading || listening}
+                onClick={() => submitAsk(question)}
+              >
+                {question}
+              </button>
+            ))}
+          </div>
+          {askLoading ? <p className="patient-ask-note">One moment...</p> : null}
+          {lastAskQuestion ? <p className="patient-ask-question">You asked: {lastAskQuestion}</p> : null}
+          {askSurface ? (
+            <div className="patient-ask-result" aria-live="polite">
+              <MirrorRenderer surface={askSurface} single pill={false} theme={askTheme} />
+              <button className="patient-ask-dismiss" type="button" onClick={dismissAsk}>
+                Okay
+              </button>
+            </div>
+          ) : null}
+        </section>
+
         {error ? <p className="patient-dashboard-error">{error}</p> : null}
 
-        <div className="patient-dashboard-actions">
-          <button className="patient-dashboard-action" type="button" onClick={handleBack} disabled={taskIndex <= 0}>
-            Back
-          </button>
-          <button
-            className="patient-dashboard-action"
-            type="button"
-            onClick={handleNext}
-            disabled={!profile?.daily_tasks.length || taskIndex >= profile.daily_tasks.length - 1}
-          >
-            Next
-          </button>
-          <button className="patient-dashboard-help" type="button" disabled={helpBusy} onClick={() => void openHelp()}>
+        <div className="patient-dashboard-actions patient-dashboard-actions-single">
+          <button className="patient-dashboard-help" type="button" disabled={helpBusy || busy} onClick={() => void openHelp()}>
             I need help
           </button>
         </div>
@@ -590,7 +754,6 @@ function PatientDashboard() {
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Confirm leave">
           <section className="patient-leave-modal">
             <h2 className="patient-leave-title">Leave this screen?</h2>
-            <p className="patient-leave-body">Enter your caretaker&apos;s password.</p>
             <input
               className="caretaker-input"
               type="password"
@@ -627,15 +790,12 @@ function PatientDashboard() {
                 className="patient-help-close"
                 type="button"
                 onClick={() => {
-                  if (helpMusicTimerRef.current !== null) {
-                    window.clearTimeout(helpMusicTimerRef.current);
-                    helpMusicTimerRef.current = null;
-                  }
+                  if (helpMusicTimerRef.current !== null) window.clearTimeout(helpMusicTimerRef.current);
                   setHelpOpen(false);
                   setHelpError("");
                 }}
               >
-                Back to dashboard
+                Back
               </button>
             </div>
             {helpBusy && !helpSurface ? <p className="patient-dashboard-note">One moment...</p> : null}
@@ -648,9 +808,7 @@ function PatientDashboard() {
               total={helpTotal}
               theme={helpTheme}
               onPanicSelect={(id) => {
-                if (id === "music") {
-                  void requestMusic();
-                }
+                if (id === "music") void requestMusic();
               }}
             />
             {helpShowOkay ? (
@@ -661,7 +819,6 @@ function PatientDashboard() {
                 onClick={() => {
                   if (helpIsMusic) {
                     setHelpOpen(false);
-                    setHelpError("");
                     return;
                   }
                   void advanceHelp(helpStep + 1);

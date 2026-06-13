@@ -303,6 +303,12 @@ export async function generatePatientAnswer(params: {
 
   const prompt = `Answer the patient's spoken question using ALL profile data below.
 If a specific memory matches, write as a warm memory card (title + story).
+For orientation questions answer clearly and briefly:
+- "where am I" → safe at home in their location_area
+- "who am I" → first name only, reassuring
+- "what day/time" → today in Europe/London
+- "what should I do" → next daily task from their plan
+Never mention Alzheimer's or dementia. Max 10 words per sentence.
 Question: ${params.question}
 Full patient profile: ${JSON.stringify(profileContextForLlm(params.profile, params.memoryPolicies))}`;
 

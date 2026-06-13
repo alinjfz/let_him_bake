@@ -1406,6 +1406,100 @@ textarea {
   font-weight: 700;
 }
 
+.caretaker-memory-studio {
+  display: grid;
+  gap: 1rem;
+}
+
+.caretaker-memory-nav {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  max-height: 9rem;
+  overflow-y: auto;
+  padding-bottom: 0.25rem;
+}
+
+.caretaker-memory-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(45, 106, 159, 0.16);
+  border-radius: 999px;
+  padding: 0.45rem 0.85rem;
+  background: rgba(255, 255, 255, 0.82);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  max-width: 14rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.caretaker-memory-chip.active {
+  background: rgba(45, 106, 159, 0.12);
+  border-color: rgba(45, 106, 159, 0.35);
+  color: var(--primary);
+}
+
+.caretaker-memory-chip.add {
+  border-style: dashed;
+  color: var(--primary);
+}
+
+.caretaker-memory-a2ui {
+  padding: 0.25rem 0;
+}
+
+.caretaker-memory-a2ui .a2ui-stack {
+  gap: 0.85rem;
+}
+
+.caretaker-memory-editor {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--border);
+}
+
+.caretaker-memory-editor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.caretaker-memory-editor-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.caretaker-form-field {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--muted);
+  flex: 1;
+}
+
+.caretaker-memory-policy-note {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.caretaker-memory-empty {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+}
+
 .patient-shell {
   min-height: 100vh;
   padding: 1rem 0 2rem;
